@@ -8,7 +8,6 @@ import "katex/dist/katex.min.css";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import Link from "next/link";
-import NextImage from "next/image";
 import { ArrowLeft, User } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -81,17 +80,17 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                     </code>
                                 );
                             },
-                            pre: ({ ...props }) => <>{props.children}</>,
-                            blockquote: ({ ...props }) => (
+                            pre: ({ ...props }: { children?: React.ReactNode }) => <>{props.children}</>,
+                            blockquote: ({ ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
                                 <blockquote className="border-l-4 border-[#b3a8d6] pl-6 py-2 italic text-gray-600 my-8 bg-gray-50 rounded-r-lg" {...props} />
                             ),
-                            img: (props: { src?: string; alt?: string }) => (
+                            img: ({ ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
                                 <span className="block my-10">
                                     <img className="rounded-2xl shadow-lg w-full" {...props} alt={props.alt || "Blog image"} />
                                     {props.alt && <span className="block text-center text-sm text-gray-500 mt-4 italic">{props.alt}</span>}
                                 </span>
                             ),
-                            a: ({ ...props }) => <a className="text-[#b3a8d6] hover:text-[#283655] transition-colors underline" {...props} />,
+                            a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-[#b3a8d6] hover:text-[#283655] transition-colors underline" {...props} />,
                         }}
                     >
                         {content}
