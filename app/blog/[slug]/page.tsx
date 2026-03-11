@@ -8,7 +8,8 @@ import "katex/dist/katex.min.css";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import Link from "next/link";
-import { ArrowLeft, Calendar, User } from "lucide-react";
+import NextImage from "next/image";
+import { ArrowLeft, User } from "lucide-react";
 import { notFound } from "next/navigation";
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -54,14 +55,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         remarkPlugins={[remarkMath]}
                         rehypePlugins={[rehypeRaw, rehypeKatex]}
                         components={{
-                            h1: ({ node, ...props }) => <h1 className="text-3xl font-bold text-[#283655] mt-12 mb-6" {...props} />,
-                            h2: ({ node, ...props }) => <h2 className="text-2xl font-bold text-[#283655] mt-10 mb-4" {...props} />,
-                            h3: ({ node, ...props }) => <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4" {...props} />,
-                            p: ({ node, ...props }) => <p className="text-gray-700 leading-relaxed mb-6" {...props} />,
-                            ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-6 space-y-2 text-gray-700" {...props} />,
-                            ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-6 space-y-2 text-gray-700" {...props} />,
-                            li: ({ node, ...props }) => <li className="ml-4" {...props} />,
-                            code: ({ node, className, children, ...props }: any) => {
+                            h1: ({ ...props }) => <h1 className="text-3xl font-bold text-[#283655] mt-12 mb-6" {...props} />,
+                            h2: ({ ...props }) => <h2 className="text-2xl font-bold text-[#283655] mt-10 mb-4" {...props} />,
+                            h3: ({ ...props }) => <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4" {...props} />,
+                            p: ({ ...props }) => <p className="text-gray-700 leading-relaxed mb-6" {...props} />,
+                            ul: ({ ...props }) => <ul className="list-disc list-inside mb-6 space-y-2 text-gray-700" {...props} />,
+                            ol: ({ ...props }) => <ol className="list-decimal list-inside mb-6 space-y-2 text-gray-700" {...props} />,
+                            li: ({ ...props }) => <li className="ml-4" {...props} />,
+                            code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode }) => {
                                 const match = /language-(\w+)/.exec(className || "");
                                 return match ? (
                                     <SyntaxHighlighter
@@ -80,17 +81,17 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                     </code>
                                 );
                             },
-                            pre: ({ node, ...props }) => <>{props.children}</>,
-                            blockquote: ({ node, ...props }) => (
+                            pre: ({ ...props }) => <>{props.children}</>,
+                            blockquote: ({ ...props }) => (
                                 <blockquote className="border-l-4 border-[#b3a8d6] pl-6 py-2 italic text-gray-600 my-8 bg-gray-50 rounded-r-lg" {...props} />
                             ),
-                            img: ({ node, ...props }) => (
+                            img: (props: { src?: string; alt?: string }) => (
                                 <span className="block my-10">
                                     <img className="rounded-2xl shadow-lg w-full" {...props} alt={props.alt || "Blog image"} />
                                     {props.alt && <span className="block text-center text-sm text-gray-500 mt-4 italic">{props.alt}</span>}
                                 </span>
                             ),
-                            a: ({ node, ...props }) => <a className="text-[#b3a8d6] hover:text-[#283655] transition-colors underline" {...props} />,
+                            a: ({ ...props }) => <a className="text-[#b3a8d6] hover:text-[#283655] transition-colors underline" {...props} />,
                         }}
                     >
                         {content}

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { User2, Mail, Github, Phone, MapPin, GraduationCap } from "lucide-react";
+import { User2, Mail, Github } from "lucide-react";
 
 export default function About() {
   return (
@@ -31,7 +31,7 @@ export default function About() {
             className="flex-1 space-y-6 text-lg text-gray-700 leading-relaxed"
           >
             <p>
-              Hi, I'm <span className="font-bold text-[#283655]">Eason Huang</span>.
+              Hi, I&apos;m <span className="font-bold text-[#283655]">Eason Huang</span>.
             </p>
             <p>
               I do things.

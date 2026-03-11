@@ -70,7 +70,7 @@ export default function Skills() {
                         <div className="w-24 h-1 bg-[#b3a8d6] mt-4 rounded-full"></div>
                     </div>
                     <p className="text-gray-600 max-w-lg md:text-right">
-                        A comprehensive overview of the technologies, frameworks, and concepts I've worked with across various projects and roles.
+                        A comprehensive overview of the technologies, frameworks, and concepts I&apos;ve worked with across various projects and roles.
                     </p>
                 </motion.div>
 

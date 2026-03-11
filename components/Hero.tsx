@@ -66,8 +66,18 @@ export default function Hero() {
     };
 
     generateStars();
+  }, []);
 
-    setHeight(document.documentElement.clientHeight);
+  useEffect(() => {
+    const handleResize = () => {
+      setHeight(document.documentElement.clientHeight);
+    };
+    
+    // Initial set
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // ViewBox coordinates for the constellation. (0,0) to (1000, 500)

@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Github, Mail, Linkedin, BookOpen } from "lucide-react";
+
+import { Github, Mail, BookOpen } from "lucide-react";
 import Link from "next/link";
 
 export default function Footer() {
@@ -14,7 +14,7 @@ export default function Footer() {
                     <div className="flex flex-col items-center md:items-start space-y-4">
                         <h3 className="text-xl font-bold text-[#283655]">Eason Huang</h3>
                         <p className="text-gray-500 text-sm max-w-xs text-center md:text-left">
-                            Software Engineer & Computer Science student at the University of Waterloo.
+                            Just a guy on wifi.
                         </p>
                     </div>
 
