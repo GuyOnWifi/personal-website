@@ -15,14 +15,17 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const themes: Theme[] = ["sunlight", "moonlight", "starlight", "twilight", "sunrise", "sunset"];
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [theme, setThemeState] = useState<Theme>("sunlight");
+    const [theme, setThemeState] = useState<Theme>("moonlight");
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
         const savedTheme = localStorage.getItem("theme") as Theme;
         if (savedTheme && themes.includes(savedTheme)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setThemeState(savedTheme);
             document.documentElement.setAttribute("data-theme", savedTheme);
         }
+        setMounted(true);
     }, []);
 
     const setTheme = (newTheme: Theme) => {
@@ -39,7 +42,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return (
         <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-            {children}
+            {!mounted ? (
+                <div style={{ visibility: 'hidden' }}>{children}</div>
+            ) : (
+                children
+            )}
         </ThemeContext.Provider>
     );
 };

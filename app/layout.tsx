@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Dancing_Script } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import GridBackground from "@/components/GridBackground";
+import Navigation from "@/components/Navigation";
+import Footer from "@/components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,8 +38,12 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <GridBackground />
-          <div className="relative z-0 min-h-screen">
-            {children}
+          <div className="relative z-0 min-h-screen max-w-2xl mx-auto px-4 flex flex-col">
+            <Navigation />
+            <main className="flex-grow">
+              {children}
+            </main>
+            <Footer />
           </div>
         </ThemeProvider>
       </body>

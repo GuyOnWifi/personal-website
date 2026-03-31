@@ -21,7 +21,7 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
     return (
         <section className="mb-12">
             <h2 className="text-sm font-bold flex items-center gap-2 mb-4">
-                <span className="text-accent">◆</span> {sectionTitle}
+                <span className="text-accent animate-pulse">❄</span> {sectionTitle}
             </h2>
 
             <div className="space-y-4 ml-2">

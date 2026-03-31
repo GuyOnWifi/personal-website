@@ -1,19 +1,19 @@
 "use client";
 
+import React from "react";
 import ThemeToggle from "./ThemeToggle";
 import Link from "next/link";
-import { motion } from "framer-motion";
 
 const navItems = [
-    { name: "about", href: "#about" },
-    { name: "projects", href: "#projects" },
-    { name: "writing", href: "#writing" },
+    { name: "about", href: "/" },
+    // { name: "projects", href: "/" },
+    { name: "blogs", href: "/blog" },
 ];
 
 export default function Navigation() {
     return (
-        <nav className="flex items-center justify-between py-8 px-4 max-w-2xl mx-auto w-full">
-            <Link href="/" className="font-bold text-xl tracking-tight">
+        <nav className="flex items-center justify-between py-8 w-full">
+            <Link href="/" className="font-bold text-3xl tracking-tight">
                 eason huang
             </Link>
 
