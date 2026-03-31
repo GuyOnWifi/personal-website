@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --accent: #38bdf8;
+  --grid-opacity: 0.1;
+}
+
+[data-theme="sunlight"] {
   --background: #ffffff;
   --foreground: #121212;
   --accent: #f59e0b;

@@ -15,7 +15,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const themes: Theme[] = ["sunlight", "moonlight", "starlight", "twilight", "sunrise", "sunset"];
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [theme, setThemeState] = useState<Theme>("starlight");
+    const [theme, setThemeState] = useState<Theme>("moonlight");
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
