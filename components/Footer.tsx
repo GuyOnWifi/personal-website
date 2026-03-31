@@ -1,54 +1,23 @@
 "use client";
 
-
-import { Github, Mail, BookOpen } from "lucide-react";
-import Link from "next/link";
+import { motion } from "framer-motion";
 
 export default function Footer() {
-    const currentYear = new Date().getFullYear();
-
     return (
-        <footer className="w-full bg-white border-t border-gray-100 py-12">
-            <div className="max-w-5xl mx-auto px-6">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-                    <div className="flex flex-col items-center md:items-start space-y-4">
-                        <h3 className="text-xl font-bold text-[#283655]">Eason Huang</h3>
-                        <p className="text-gray-500 text-sm max-w-xs text-center md:text-left">
-                            Just a guy on wifi.
-                        </p>
-                    </div>
+        <footer className="max-w-2xl mx-auto w-full px-4 py-12 border-t border-foreground/10 mt-12">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="text-sm opacity-50">
+                    2026 © eason huang
+                </div>
 
-                    <div className="flex flex-col items-center md:items-end space-y-6">
-                        <div className="flex items-center gap-6">
-                            <a
-                                href="https://github.com/guyonwifi"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-gray-400 hover:text-[#283655] transition-colors"
-                                aria-label="GitHub"
-                            >
-                                <Github size={24} />
-                            </a>
-                            <a
-                                href="mailto:me@easonhuang.dev"
-                                className="text-gray-400 hover:text-[#b3a8d6] transition-colors"
-                                aria-label="Email"
-                            >
-                                <Mail size={24} />
-                            </a>
-                            <Link
-                                href="/blog"
-                                className="flex items-center gap-2 text-[#b3a8d6] font-semibold hover:text-[#283655] transition-colors group"
-                            >
-                                <BookOpen size={20} className="group-hover:scale-110 transition-transform" />
-                                <span>Visit Blog</span>
-                            </Link>
-                        </div>
+                <div className="font-signature text-3xl opacity-80 select-none">
+                    Eason Huang
+                </div>
 
-                        <p className="text-gray-400 text-xs">
-                            © {currentYear} Eason Huang. Built with Next.js & Framer Motion.
-                        </p>
-                    </div>
+                <div className="flex gap-4 opacity-50 hover:opacity-100 transition-opacity items-center">
+                    <a href="https://github.com/guyonwifi" target="_blank" rel="noreferrer" className="hover:text-accent font-medium">gh</a>
+                    <a href="mailto:easonh887@gmail.com" className="hover:text-accent font-medium">ml</a>
+                    <a href="https://linkedin.com/in/easonhuang-" target="_blank" rel="noreferrer" className="hover:text-accent font-medium">in</a>
                 </div>
             </div>
         </footer>

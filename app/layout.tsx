@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Dancing_Script } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import GridBackground from "@/components/GridBackground";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -12,9 +14,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const dancingScript = Dancing_Script({
+  variable: "--font-signature",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
-  title: "Eason Huang",
-  description: "Eason Huang's Personal Website",
+  title: "eason huang",
+  description: "personal website of eason huang",
 };
 
 export default function RootLayout({
@@ -23,11 +30,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${dancingScript.variable} antialiased selection:bg-accent selection:text-background`}
       >
-        {children}
+        <ThemeProvider>
+          <GridBackground />
+          <div className="relative z-0 min-h-screen">
+            {children}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );
