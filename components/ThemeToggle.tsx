@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import React from "react";
 import { useTheme, Theme } from "./ThemeProvider";
 import { motion, AnimatePresence } from "framer-motion";
 
