@@ -15,7 +15,7 @@ export default function Home() {
       title: "President & Full Stack Developer",
       company: "EurekaHacks",
       description: "built application portal for Canada's largest high school hackathon serving 400+ applicants.",
-      icon: "/eurekahacks.svg",
+      icon: "/eurekahacks-logo.webp",
       link: "https://eurekahacks.ca",
       type: "job" as const
     },
@@ -49,6 +49,7 @@ export default function Home() {
 
   return (
     <div className="py-12 pb-24">
+      <h1 className="sr-only">eason huang, software engineer</h1>
       <Hero />
 
       <div className="mt-12">

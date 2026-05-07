@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import React from "react";
 
 interface ExperienceItem {
@@ -45,7 +46,14 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className="opacity-70">{item.title}</span>
                                         {item.icon && (
-                                            <img src={item.icon as string} alt="" className="w-4 h-4 object-contain" />
+                                            <Image
+                                                src={item.icon}
+                                                alt={`${item.company} logo`}
+                                                width={20}
+                                                height={20}
+                                                className="w-5 h-5 object-contain"
+                                                unoptimized={item.icon.endsWith(".svg")}
+                                            />
                                         )}
                                         {item.company && (
                                             <a

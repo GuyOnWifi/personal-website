@@ -1,3 +1,10 @@
+---
+title: building a neural net from scratch
+description: training an mnist classifier in pure numpy, no tensorflow or pytorch, with a 1000x speedup from vectorization.
+date: 2025-02-08
+tags: [machine learning, python, numpy]
+---
+
 _Building a Neural Network from Scratch: No TensorFlow, No PyTorch, Just Numpy (+ Working Demo)_
 ================================================================================================
 

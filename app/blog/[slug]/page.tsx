@@ -10,6 +10,75 @@ import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import matter from "gray-matter";
+
+function slugToTitle(slug: string) {
+    return slug
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+}
+
+interface PostMeta {
+    title?: string;
+    description?: string;
+    date?: string;
+    tags?: string[];
+}
+
+export async function generateStaticParams() {
+    const publicDir = path.join(process.cwd(), "public");
+    return fs
+        .readdirSync(publicDir)
+        .filter((file) => file.endsWith(".md"))
+        .map((file) => ({ slug: file.replace(".md", "") }));
+}
+
+export async function generateMetadata({
+    params,
+}: {
+    params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+    const { slug } = await params;
+    const filePath = path.join(process.cwd(), "public", `${slug}.md`);
+    if (!fs.existsSync(filePath)) {
+        return { title: "not found" };
+    }
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const { data, content } = matter(raw);
+    const meta = data as PostMeta;
+    const title = meta.title || slugToTitle(slug).toLowerCase();
+    const description =
+        meta.description ||
+        content
+            .replace(/[#>*_`]/g, "")
+            .replace(/[–—]/g, ",")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 160) ||
+        `${title}. a post by eason huang.`;
+    const url = `/blog/${slug}`;
+    return {
+        title,
+        description,
+        alternates: { canonical: url },
+        openGraph: {
+            type: "article",
+            url,
+            title: `${title} by eason huang`,
+            description,
+            authors: ["eason huang"],
+            publishedTime: meta.date,
+            tags: meta.tags,
+        },
+        twitter: {
+            card: "summary_large_image",
+            title: `${title} by eason huang`,
+            description,
+        },
+    };
+}
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
@@ -20,20 +89,53 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         return notFound();
     }
 
-    const content = fs.readFileSync(filePath, "utf-8");
-    const title = slug.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const { data, content } = matter(raw);
+    const meta = data as PostMeta;
+    const title = meta.title || slugToTitle(slug);
+    const description = meta.description;
+    const stat = fs.statSync(filePath);
+    const publishedISO = meta.date ? new Date(meta.date).toISOString() : stat.birthtime.toISOString();
+    const publishedDate = new Date(publishedISO);
+    const jsonLd = {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        headline: title,
+        description,
+        author: { "@type": "Person", name: "eason huang", url: "https://easonhuang.dev" },
+        datePublished: publishedISO,
+        dateModified: stat.mtime.toISOString(),
+        keywords: meta.tags,
+        mainEntityOfPage: `https://easonhuang.dev/blog/${slug}`,
+    };
 
     return (
         <div className="py-12 pb-24 prose prose-invert max-w-none">
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+            />
             <header className="mb-16">
                 <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6 leading-tight">
                     {title}
                 </h1>
+                {description && (
+                    <p className="text-lg opacity-70 mb-6 leading-relaxed">{description}</p>
+                )}
                 <div className="flex flex-wrap items-center gap-6 opacity-50 border-b border-foreground/10 pb-8">
                     <div className="flex items-center gap-2">
                         <User size={18} />
                         <span>eason huang</span>
                     </div>
+                    {meta.date && (
+                        <time dateTime={publishedISO}>
+                            {publishedDate.toLocaleDateString("en-US", {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                            }).toLowerCase()}
+                        </time>
+                    )}
                 </div>
             </header>
 

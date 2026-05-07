@@ -2,17 +2,40 @@ import fs from "fs";
 import path from "path";
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
+import type { Metadata } from "next";
+import matter from "gray-matter";
+
+export const metadata: Metadata = {
+    title: "writing",
+    description: "notes on software, deep learning, and side projects.",
+    alternates: { canonical: "/blog" },
+    openGraph: {
+        title: "writing by eason huang",
+        description: "notes on software, deep learning, and side projects.",
+        url: "/blog",
+        type: "website",
+    },
+};
 
 export default async function BlogListPage() {
     const publicDir = path.join(process.cwd(), "public");
     const files = fs.readdirSync(publicDir);
     const blogs = files
         .filter((file) => file.endsWith(".md"))
-        .map((file) => ({
-            slug: file.replace(".md", ""),
-            title: file.replace(".md", "").split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
-            fileName: file,
-        }));
+        .map((file) => {
+            const slug = file.replace(".md", "");
+            const raw = fs.readFileSync(path.join(publicDir, file), "utf-8");
+            const { data } = matter(raw);
+            return {
+                slug,
+                title:
+                    (data.title as string) ||
+                    slug.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+                description: (data.description as string) || "",
+                date: data.date ? new Date(data.date as string) : null,
+            };
+        })
+        .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
 
     return (
         <div className="py-12 pb-24">
@@ -38,10 +61,22 @@ export default async function BlogListPage() {
                             <h2 className="text-2xl font-bold group-hover:text-accent transition-colors">
                                 {blog.title}
                             </h2>
+                            {blog.description && (
+                                <p className="mt-3 opacity-60 text-sm leading-relaxed">
+                                    {blog.description}
+                                </p>
+                            )}
                             <div className="mt-4 flex items-center gap-4 text-sm opacity-50">
-                                <span className="flex items-center gap-1">
-                                    read article
-                                </span>
+                                {blog.date && (
+                                    <time dateTime={blog.date.toISOString()}>
+                                        {blog.date.toLocaleDateString("en-US", {
+                                            year: "numeric",
+                                            month: "short",
+                                            day: "numeric",
+                                        }).toLowerCase()}
+                                    </time>
+                                )}
+                                <span>read article</span>
                             </div>
                         </div>
                     </Link>
