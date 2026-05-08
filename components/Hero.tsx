@@ -144,7 +144,7 @@ export default function Hero() {
                     viewBox="0 0 1000 500"
                     preserveAspectRatio="xMidYMid meet"
                 >
-                    <g transform="translate(500, 250) scale(2.25) translate(-490, -225)">
+                    <g transform="translate(500, 250) scale(2) translate(-490, -225)">
                         {/* e */}
                         <motion.path
                             d={ePath}
