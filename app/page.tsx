@@ -2,6 +2,16 @@ import Hero from "@/components/Hero";
 import ExperienceList from "@/components/ExperienceList";
 
 export default function Home() {
+  const currentItems = [
+    {
+      title: "CS @",
+      company: "Waterloo",
+      icon: "/waterloo.svg",
+      link: "https://uwaterloo.ca",
+      type: "job" as const
+    },
+  ];
+
   const buildingItems = [
     {
       title: "Full-stack and AI/ML Intern",
@@ -23,6 +33,25 @@ export default function Home() {
 
   const previousItems = [
     {
+      title: "named",
+      company: "Schulich Leader",
+      icon: "/schulich.svg",
+      link: "https://schulichleaders.com",
+      description: (
+        <>
+          for computer engineering at uoft; turned it down for{" "}
+          <a
+            href="/blog/the_offer_i_turned_down"
+            className="text-accent underline decoration-accent/30 decoration-1 underline-offset-4 hover:decoration-accent transition-all"
+          >
+            waterloo
+          </a>
+          .
+        </>
+      ),
+      type: "job" as const
+    },
+    {
       title: "Technical Lead",
       company: "Factful",
       description: "developed LLM powered fact checking tool; scaled to 20k+ visits; declined $150k to continue high school; finalist a16z",
@@ -31,8 +60,8 @@ export default function Home() {
       type: "job" as const
     },
     {
-      title: "Top 100 worldwide in PicoCTF 2025",
-      company: "picoCTF",
+      title: "Top 100 worldwide in",
+      company: "picoCTF 2025",
       description: "started my love for arch linux",
       icon: "/picoctf.svg",
       link: "https://picoctf.org",
@@ -48,11 +77,16 @@ export default function Home() {
   ];
 
   return (
-    <div className="py-12 pb-24">
+    <div className="py-8 pb-16">
       <h1 className="sr-only">eason huang, software engineer</h1>
       <Hero />
 
-      <div className="mt-12">
+      <div className="mt-8">
+        <ExperienceList
+          sectionTitle="currently:"
+          items={currentItems}
+        />
+
         <ExperienceList
           sectionTitle="recently:"
           items={buildingItems}

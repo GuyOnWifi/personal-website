@@ -131,7 +131,7 @@ export default function Hero() {
     const drawTransition = { duration: 3, ease: "easeInOut" as const };
 
     return (
-        <div className="relative h-[300px] w-full overflow-hidden rounded-2xl bg-foreground/[0.03] border border-foreground/5 box-content">
+        <div className="relative h-[240px] w-full overflow-hidden rounded-2xl bg-foreground/[0.03] border border-foreground/5 box-content">
             {/* Background Stars */}
             {stars.map((star) => (
                 <Star key={star.id} {...star} />

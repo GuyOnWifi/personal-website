@@ -7,7 +7,7 @@ import React from "react";
 interface ExperienceItem {
     title: string;
     company: string;
-    description?: string;
+    description?: React.ReactNode;
     icon?: string;
     link?: string;
     type: "job" | "project" | "header";
@@ -15,17 +15,19 @@ interface ExperienceItem {
 
 interface ExperienceListProps {
     items: ExperienceItem[];
-    sectionTitle: string;
+    sectionTitle?: string;
 }
 
 export default function ExperienceList({ items, sectionTitle }: ExperienceListProps) {
     return (
-        <section className="mb-12">
-            <h2 className="text-sm font-bold flex items-center gap-2 mb-4">
-                <span className="text-accent animate-pulse">❄</span> {sectionTitle}
-            </h2>
+        <section className="mb-8">
+            {sectionTitle && (
+                <h2 className="text-sm font-bold flex items-center gap-2 mb-3">
+                    <span className="text-accent animate-pulse">❄</span> {sectionTitle}
+                </h2>
+            )}
 
-            <div className="space-y-4 ml-2">
+            <div className="space-y-3 ml-2">
                 {items.map((item, index) => (
                     <motion.div
                         key={index}
@@ -48,23 +50,25 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
                                         {item.icon && (
                                             <Image
                                                 src={item.icon}
-                                                alt={`${item.company} logo`}
+                                                alt={`${item.company || item.title} logo`}
                                                 width={20}
                                                 height={20}
                                                 className="w-5 h-5 object-contain"
                                                 unoptimized={item.icon.endsWith(".svg")}
                                             />
                                         )}
-                                        {item.company && (
-                                            <a
-                                                href={item.link || "#"}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="font-semibold underline decoration-foreground/20 decoration-1 underline-offset-4 hover:decoration-accent transition-all cursor-pointer"
-                                            >
-                                                {item.company}
-                                            </a>
-                                        )}
+                                        {item.company && (() => {
+                                            const isInternal = item.link?.startsWith("/");
+                                            return (
+                                                <a
+                                                    href={item.link || "#"}
+                                                    {...(isInternal ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+                                                    className="font-semibold underline decoration-foreground/20 decoration-1 underline-offset-4 hover:decoration-accent transition-all cursor-pointer"
+                                                >
+                                                    {item.company}
+                                                </a>
+                                            );
+                                        })()}
                                     </div>
                                     {item.description && (
                                         <p className="opacity-50 mt-1 leading-relaxed text-[13px] max-w-xl">
