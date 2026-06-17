@@ -36,7 +36,7 @@ export default function Home() {
       title: "named",
       company: "Schulich Leader",
       icon: "/schulich.svg",
-      link: "https://schulichleaders.com",
+      link: "https://schulichleaders.com/nominees/?sq=Eason+Huang#students",
       description: (
         <>
           for computer engineering at uoft; turned it down for{" "}
