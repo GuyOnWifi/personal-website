@@ -1,53 +1,23 @@
 @import "tailwindcss";
 
+/* The live theme is driven by JS (components/themeCycle.ts): it interpolates a
+   gradient sky around a continuous ring and sets --bg-gradient / --background /
+   --foreground / --accent inline on <html>. The [data-theme] blocks below are
+   only flat-color fallbacks to prevent a flash before hydration — each is the
+   mid-stop of its anchor gradient. Day-walk order:
+   sunrise → sunlight → sunset → twilight → moonlight → starlight. */
 :root {
-  --background: #0f172a;
-  --foreground: #e2e8f0;
-  --accent: #38bdf8;
-  --grid-opacity: 0.1;
+  --background: #080a12;
+  --foreground: #cdd6e8;
+  --accent: #8fb6dd;
 }
 
-[data-theme="sunlight"] {
-  --background: #ffffff;
-  --foreground: #121212;
-  --accent: #f59e0b;
-  --grid-opacity: 0.04;
-}
-
-[data-theme="moonlight"] {
-  --background: #0f172a;
-  --foreground: #e2e8f0;
-  --accent: #38bdf8;
-  --grid-opacity: 0.1;
-}
-
-[data-theme="starlight"] {
-  --background: #000000;
-  --foreground: #ffffff;
-  --accent: #ffffff;
-  --grid-opacity: 0.15;
-}
-
-[data-theme="twilight"] {
-  --background: #2d1b36;
-  --foreground: #fde68a;
-  --accent: #fb923c;
-  --grid-opacity: 0.1;
-}
-
-[data-theme="sunrise"] {
-  --background: #fffbeb;
-  --foreground: #121212;
-  --accent: #f59e0b;
-  --grid-opacity: 0.06;
-}
-
-[data-theme="sunset"] {
-  --background: #780000;
-  --foreground: #ffffff;
-  --accent: #f48c06;
-  --grid-opacity: 0.12;
-}
+[data-theme="sunrise"]  { --background: #fcd2b0; --foreground: #5a3a38; --accent: #e8794f; }
+[data-theme="sunlight"] { --background: #bfe4f7; --foreground: #1b2a3d; --accent: #f3a417; }
+[data-theme="sunset"]   { --background: #ffb778; --foreground: #43221a; --accent: #e0531f; }
+[data-theme="twilight"] { --background: #5b2f7a; --foreground: #f1e3d4; --accent: #f0894e; }
+[data-theme="moonlight"]{ --background: #080a12; --foreground: #cdd6e8; --accent: #8fb6dd; }
+[data-theme="starlight"]{ --background: #114e86; --foreground: #dfeefb; --accent: #54c5f2; }
 
 @theme inline {
   --color-background: var(--background);
@@ -58,15 +28,72 @@
 }
 
 body {
-  background: var(--background);
+  /* the gradient "sky"; falls back to the flat --background before JS hydrates */
+  background: var(--bg-gradient, var(--background));
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   text-transform: lowercase;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: color 0.3s ease;
 }
 
-.grid-bg {
-  background-image: radial-gradient(circle, var(--foreground) 1px, transparent 1px);
-  background-size: 24px 24px;
-  opacity: var(--grid-opacity);
+/* ---- aurora shimmer (visible mainly in the starlight part of the cycle) ---- */
+.aurora-layer {
+  opacity: var(--aurora-opacity, 0);
+  transition: opacity 1.2s ease;
+}
+
+.aurora-band {
+  position: absolute;
+  inset: -45% -25%;
+  filter: blur(70px);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.aurora-band-1 {
+  background: linear-gradient(
+    115deg,
+    transparent 18%,
+    rgba(60, 160, 235, 0.55) 45%,
+    transparent 72%
+  );
+  animation: aurora-drift-1 15s ease-in-out infinite alternate;
+}
+
+.aurora-band-2 {
+  background: linear-gradient(
+    72deg,
+    transparent 28%,
+    rgba(84, 197, 242, 0.5) 55%,
+    transparent 82%
+  );
+  animation: aurora-drift-2 21s ease-in-out infinite alternate;
+}
+
+.aurora-band-3 {
+  background: linear-gradient(
+    158deg,
+    transparent 32%,
+    rgba(132, 110, 235, 0.45) 60%,
+    transparent 88%
+  );
+  animation: aurora-drift-3 27s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-drift-1 {
+  from { transform: translate3d(-8%, -4%, 0) rotate(-4deg) scale(1.1); }
+  to   { transform: translate3d(10%, 6%, 0) rotate(5deg) scale(1.25); }
+}
+@keyframes aurora-drift-2 {
+  from { transform: translate3d(8%, 5%, 0) rotate(6deg) scale(1.2); }
+  to   { transform: translate3d(-10%, -3%, 0) rotate(-5deg) scale(1.05); }
+}
+@keyframes aurora-drift-3 {
+  from { transform: translate3d(-5%, 8%, 0) rotate(3deg) scale(1.15); }
+  to   { transform: translate3d(6%, -7%, 0) rotate(-6deg) scale(1.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-band { animation: none; }
 }

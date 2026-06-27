@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Dancing_Script } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import GridBackground from "@/components/GridBackground";
+import AuroraLayer from "@/components/AuroraLayer";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Analytics } from "@vercel/analytics/next";
@@ -121,7 +121,7 @@ export default function RootLayout({
           }}
         />
         <ThemeProvider>
-          <GridBackground />
+          <AuroraLayer />
           <div className="relative z-0 min-h-screen max-w-2xl mx-auto px-4 flex flex-col">
             <Navigation />
             <main className="flex-grow">

@@ -14,7 +14,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
     const { theme } = useTheme();
 
     // Determine if we should use a light or dark style
-    const isDark = ["moonlight", "starlight", "twilight", "sunset"].includes(theme);
+    const isDark = ["moonlight", "starlight", "twilight"].includes(theme);
     const baseStyle = isDark ? atomDark : oneLight;
 
     // Create a cleaned version of the style object where background
