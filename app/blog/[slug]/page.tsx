@@ -5,8 +5,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import CodeBlock from "@/components/CodeBlock";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -141,17 +140,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
             <article className="blog-content text-foreground/90">
                 <style dangerouslySetInnerHTML={{
-                    __html: `
-                    .katex {
-                        color: inherit !important;
-                    }
-                    .blog-content pre {
-                        background: var(--foreground) !important;
-                        opacity: 0.03;
-                        border: 1px solid var(--foreground);
-                        border-color: rgba(var(--foreground-rgb), 0.1);
-                    }
-                ` }} />
+                    __html: `.katex { color: inherit !important; }`,
+                }} />
                 <ReactMarkdown
                     remarkPlugins={[remarkMath]}
                     rehypePlugins={[rehypeRaw, rehypeKatex]}
@@ -166,27 +156,18 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode }) => {
                             const match = /language-(\w+)/.exec(className || "");
                             return match ? (
-                                <SyntaxHighlighter
-                                    style={oneLight}
-                                    language={match[1]}
-                                    PreTag="div"
-                                    className="rounded-2xl my-8 border border-foreground/10"
-                                    wrapLines={true}
-                                    customStyle={{
-                                        background: "transparent",
-                                        padding: "1.5rem",
-                                    }}
-                                    {...props}
-                                >
+                                <CodeBlock language={match[1]}>
                                     {String(children).replace(/\n$/, "")}
-                                </SyntaxHighlighter>
+                                </CodeBlock>
                             ) : (
-                                <code className="bg-foreground/10 rounded px-1 py-0.5 font-mono text-sm" {...props}>
+                                <code className="bg-foreground/10 rounded px-1.5 py-0.5 font-mono text-[0.85em]" {...props}>
                                     {children}
                                 </code>
                             );
                         },
-                        pre: ({ ...props }: { children?: React.ReactNode }) => <div className="bg-foreground/[0.03] rounded-2xl p-4 my-8 border border-foreground/5">{props.children}</div>,
+                        // fenced code returns its own CodeBlock card, so the wrapping
+                        // <pre> just passes through (no nested card/background).
+                        pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
                         blockquote: ({ ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
                             <blockquote className="border-l-4 border-accent pl-6 py-2 italic opacity-80 my-8 bg-foreground/[0.02] rounded-r-lg" {...props} />
                         ),

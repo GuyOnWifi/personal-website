@@ -34,12 +34,19 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
                 style={cleanedStyle}
                 language={language}
                 PreTag="div"
-                className="rounded-2xl border border-foreground/10 normal-case"
+                className="rounded-2xl border border-foreground/10 normal-case overflow-x-auto"
                 wrapLines={false}
                 customStyle={{
-                    background: isDark ? "rgba(0, 0, 0, 0.2)" : "rgba(0, 0, 0, 0.03)",
+                    // a stable frosted-glass card, independent of the gradient sky
+                    background: isDark
+                        ? "rgba(12, 15, 23, 0.6)"
+                        : "rgba(255, 255, 255, 0.55)",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
                     padding: "1.5rem",
                     margin: 0,
+                    fontSize: "0.875rem",
+                    lineHeight: 1.6,
                 }}
             >
                 {children}

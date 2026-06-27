@@ -224,9 +224,10 @@ $$
 $$
 
 $$
-\frac{\partial a_i}{\partial z_j} = a_i \cdot (1 - a_i) \quad \text{when} \quad i = j
-
-\frac{\partial a_i}{\partial z_j} = -a_j \cdot a_i \quad \text{when} \quad i \neq j
+\begin{aligned}
+\frac{\partial a_i}{\partial z_j} &= a_i \cdot (1 - a_i) \quad \text{when} \quad i = j \\[6pt]
+\frac{\partial a_i}{\partial z_j} &= -a_j \cdot a_i \quad \text{when} \quad i \neq j
+\end{aligned}
 $$
 
 > *The partial derivative of softmax depends on whether or not the output and input are the same index.*

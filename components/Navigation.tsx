@@ -8,6 +8,7 @@ const navItems = [
     { name: "about", href: "/" },
     // { name: "projects", href: "/" },
     { name: "blogs", href: "/blog" },
+    { name: "notes", href: "https://notes.easonhuang.dev", external: true },
 ];
 
 export default function Navigation() {
@@ -19,15 +20,27 @@ export default function Navigation() {
 
             <div className="flex items-center gap-6">
                 <div className="hidden sm:flex gap-6">
-                    {navItems.map((item) => (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className="hover:text-accent transition-colors border-b border-transparent hover:border-accent"
-                        >
-                            {item.name}
-                        </Link>
-                    ))}
+                    {navItems.map((item) =>
+                        item.external ? (
+                            <a
+                                key={item.href}
+                                href={item.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="hover:text-accent transition-colors border-b border-transparent hover:border-accent"
+                            >
+                                {item.name}
+                            </a>
+                        ) : (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className="hover:text-accent transition-colors border-b border-transparent hover:border-accent"
+                            >
+                                {item.name}
+                            </Link>
+                        )
+                    )}
                 </div>
                 <ThemeToggle />
             </div>
