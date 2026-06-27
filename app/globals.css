@@ -17,7 +17,7 @@
 [data-theme="sunset"]   { --background: #ffb778; --foreground: #43221a; --accent: #e0531f; }
 [data-theme="twilight"] { --background: #5b2f7a; --foreground: #f1e3d4; --accent: #f0894e; }
 [data-theme="moonlight"]{ --background: #080a12; --foreground: #cdd6e8; --accent: #8fb6dd; }
-[data-theme="starlight"]{ --background: #114e86; --foreground: #dfeefb; --accent: #54c5f2; }
+[data-theme="starlight"]{ --background: #241a3a; --foreground: #f3e9ef; --accent: #cf9088; }
 
 @theme inline {
   --color-background: var(--background);
@@ -55,7 +55,7 @@ body {
   background: linear-gradient(
     115deg,
     transparent 18%,
-    rgba(60, 160, 235, 0.55) 45%,
+    rgba(120, 84, 148, 0.42) 45%,
     transparent 72%
   );
   animation: aurora-drift-1 15s ease-in-out infinite alternate;
@@ -65,7 +65,7 @@ body {
   background: linear-gradient(
     72deg,
     transparent 28%,
-    rgba(84, 197, 242, 0.5) 55%,
+    rgba(178, 102, 118, 0.36) 55%,
     transparent 82%
   );
   animation: aurora-drift-2 21s ease-in-out infinite alternate;
@@ -75,7 +75,7 @@ body {
   background: linear-gradient(
     158deg,
     transparent 32%,
-    rgba(132, 110, 235, 0.45) 60%,
+    rgba(196, 132, 110, 0.32) 60%,
     transparent 88%
   );
   animation: aurora-drift-3 27s ease-in-out infinite alternate;

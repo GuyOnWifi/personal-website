@@ -76,10 +76,12 @@ export const ANCHORS: Anchor[] = [
         name: "starlight",
         emoji: "🌌",
         dark: true,
-        stops: ["#050917", "#114e86", "#16275e"],
-        glow: "#4ad0ee",
-        foreground: "#dfeefb",
-        accent: "#54c5f2",
+        // pre-dawn: deep night up top fading to the first warm light at the horizon,
+        // bridging into sunrise (the next anchor on the ring).
+        stops: ["#070713", "#241a3a", "#5e3a4c"],
+        glow: "#3a2c4e",
+        foreground: "#f3e9ef",
+        accent: "#cf9088",
     },
 ];
 
