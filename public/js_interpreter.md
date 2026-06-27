@@ -1,12 +1,12 @@
 ---
-title: building a javascript interpreter
+title: building a javascript interpreter from scratch
 description: walking through how i built a javascript interpreter from scratch with a lexer, parser, and executor.
 date: 2025-04-12
 tags: [javascript, interpreters, compilers]
 ---
 
-Building a JavaScript interpreter
-=================================
+Building a JavaScript interpreter from scratch
+==============================================
 
 ![best programming language](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*x15WU1tjr_qt2cEJaOgPSw.png)
 

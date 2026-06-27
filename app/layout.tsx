@@ -48,7 +48,15 @@ export const metadata: Metadata = {
     "factful",
     "eurekahacks",
   ],
-  alternates: { canonical: "/" },
+  alternates: {
+    canonical: "/",
+    types: {
+      "application/rss+xml": [
+        { url: "/blog/feed.xml", title: "eason huang — blog" },
+        { url: "https://notes.easonhuang.dev/index.xml", title: "eason huang — notes" },
+      ],
+    },
+  },
   openGraph: {
     type: "website",
     url: SITE_URL,
