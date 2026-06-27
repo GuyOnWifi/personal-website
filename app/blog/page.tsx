@@ -90,7 +90,7 @@ export default async function BlogListPage() {
                 )}
             </div>
 
-            <div className="mt-16 pt-10 border-t border-foreground/10">
+            <div className="mt-16">
                 <RecentNotes />
             </div>
         </div>

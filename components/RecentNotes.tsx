@@ -1,10 +1,10 @@
 // Pulls the latest notes from the Quartz digital garden (notes.easonhuang.dev)
-// via its RSS feed and shows them as a small strip on the homepage. Server
-// component with ISR; if the feed is unreachable it renders nothing.
+// via its RSS feed and shows them as a callout card. Server component with ISR;
+// if the feed is unreachable it renders nothing.
 
 const FEED_URL = "https://notes.easonhuang.dev/index.xml";
 const NOTES_URL = "https://notes.easonhuang.dev";
-const MAX_ITEMS = 5;
+const MAX_ITEMS = 6;
 
 interface NoteItem {
     title: string;
@@ -61,43 +61,38 @@ export default async function RecentNotes() {
     if (notes.length === 0) return null;
 
     return (
-        <section className="mb-8">
-            <h2 className="text-sm font-bold flex items-center gap-2 mb-3">
-                <span className="text-accent animate-pulse">❄</span>
-                from my notes:
-                <a
-                    href={NOTES_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="ml-auto text-xs font-normal opacity-50 hover:opacity-100 hover:text-accent transition-all"
-                >
-                    all notes →
-                </a>
+        <section className="rounded-2xl border border-foreground/10 bg-foreground/[0.03] backdrop-blur-sm p-8 transition-colors hover:border-accent/25">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+                <span aria-hidden>🌱</span> i also keep a digital garden
             </h2>
+            <p className="mt-2 max-w-xl opacity-60 text-sm leading-relaxed">
+                loose, evergreen notes on what i&apos;m learning. rougher and more
+                frequent than the posts above.
+            </p>
 
-            <div className="space-y-3 ml-2">
+            <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
                 {notes.map((note) => (
                     <a
                         key={note.link}
                         href={note.link}
                         target="_blank"
                         rel="noreferrer"
-                        className="group flex items-start gap-2 text-sm"
+                        className="rounded-full border border-foreground/10 bg-foreground/[0.04] px-3 py-1 opacity-80 hover:opacity-100 hover:border-accent/40 hover:text-accent transition-all"
                     >
-                        <span className="opacity-40 group-hover:opacity-100 transition-opacity mt-[2px]">
-                            ↳
-                        </span>
-                        <span className="opacity-70 underline decoration-foreground/20 decoration-1 underline-offset-4 group-hover:text-accent group-hover:decoration-accent transition-all">
-                            {note.title}
-                        </span>
-                        {note.date && (
-                            <span className="opacity-40 text-[12px] mt-[2px] whitespace-nowrap">
-                                {note.date}
-                            </span>
-                        )}
+                        {note.title}
                     </a>
                 ))}
             </div>
+
+            <a
+                href={NOTES_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="group mt-6 inline-flex items-center gap-1 text-accent text-sm font-semibold hover:underline underline-offset-4"
+            >
+                explore notes
+                <span className="transition-transform group-hover:translate-x-0.5">→</span>
+            </a>
         </section>
     );
 }
