@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import type { Metadata } from "next";
 import matter from "gray-matter";
+import RecentNotes from "@/components/RecentNotes";
 
 export const metadata: Metadata = {
     title: "writing",
@@ -87,6 +88,10 @@ export default async function BlogListPage() {
                         no blog posts found yet. check back soon!
                     </div>
                 )}
+            </div>
+
+            <div className="mt-16 pt-10 border-t border-foreground/10">
+                <RecentNotes />
             </div>
         </div>
     );

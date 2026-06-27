@@ -1,6 +1,5 @@
 import Hero from "@/components/Hero";
 import ExperienceList from "@/components/ExperienceList";
-import RecentNotes from "@/components/RecentNotes";
 
 export default function Home() {
   const currentItems = [
@@ -97,8 +96,6 @@ export default function Home() {
           sectionTitle="previously & projects:"
           items={previousItems}
         />
-
-        <RecentNotes />
       </div>
     </div>
   );
