@@ -29,9 +29,7 @@ Matrix multiplication heavily uses SIMD (Single Instruction, Multiple Data) whic
 | --------------------------------------------------------------------------------------------- | ------- | ---------- | ---- | -------- |
 | [VFMADD231PS (ZMM, ZMM, ZMM)](https://uops.info/html-instr/VFMADD231PS_ZMM_ZMM_ZMM.html#ZEN5) | 3/4     | 0.50       | 1    | 1\*FP0/1 |
 
-[^21]
-
-Specifically, we can use the VFMADD (vector fused multiply-add) which does $a * b + c$, allowing us to do 2 operations for one instruction. With a throughput of 0.5 cycles / instructions, we can issue 2 of these in parallel every cycle.
+Specifically, we can use the VFMADD (vector fused multiply-add) which does $a * b + c$, allowing us to do 2 operations for one instruction. With a throughput of 0.5 cycles / instructions, we can issue 2 of these in parallel every cycle.[^21]
 
 So, theoretically, the total FLOPS is
 
@@ -66,13 +64,14 @@ Benchmarked using [Google Benchmark](https://github.com/google/benchmark). Teste
 | **OpenBLAS (4096x4096, multi-threaded)**                           | **43.7**  | **3142** | **78.71%**    |
 | **OpenBLAS (4096x4096, tuned with 16 threads + taskset)**          | **34.4**  | **4001** | **100%**      |
 | Full Tiling + Optimized sequential packing + Threading (4096x4096) | 33.4      | 4120     | 103%          |
-[^27]
+
 Note: single threaded is higher than calculation due to AMD chip's behavior of being able to boost up to ~5.4 GHz for a single core due to less thermal constraints
 
-I organized this table to compare relative to the appropriate OpenBLAS routine (single vs multithreaded). Or else the table would look like a sudden 16x jump, even though we're actually working our way up the optimizing ladder!
+I organized this table to compare relative to the appropriate OpenBLAS routine (single vs multithreaded).[^27] Or else the table would look like a sudden 16x jump, even though we're actually working our way up the optimizing ladder!
+
 ## Basic Implementation
 
-The naive approach. This one implements matrix multiplication as its literal definition: for each row of A and column of B, compute their [dot product](https://en.wikipedia.org/wiki/Dot_product).
+The naive approach. This one implements matrix multiplication as its literal definition: for each row of A and column of B, compute their [dot product](https://en.wikipedia.org/wiki/Dot_product).[^4]
 ![The naive order: rows of A outside, columns of B in the middle, dot product along k inside](/matmul/naive-loop-order.webp)
 
 ```cpp
@@ -88,8 +87,6 @@ void naive(int M, int N, int K, const float *A, const float *B, float *C) {
   }
 }
 ```
-
-[^4]
 
 We're compiling with `-O3 -march=znver5` to enable AVX512 (gcc is conservative, and doesn't assume AVX512 since not all computers have those) and let the compiler speed up some of our hot loops to not pay a branch predictor cost.
 
