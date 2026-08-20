@@ -37,12 +37,15 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
                 className="rounded-2xl border border-foreground/10 normal-case overflow-x-auto"
                 wrapLines={false}
                 customStyle={{
-                    // a stable frosted-glass card, independent of the gradient sky
-                    background: isDark
-                        ? "rgba(12, 15, 23, 0.6)"
-                        : "rgba(255, 255, 255, 0.55)",
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
+                    // Translucent, not a solid fill: the visible sky is the
+                    // --bg-gradient, so any opaque colour (or a mix against the
+                    // flat --background fallback) reads as a foreign card
+                    // pasted on top. Tinting --foreground at low alpha and
+                    // letting the backdrop-blur show the real gradient through
+                    // keeps it in palette on every theme, light or dark.
+                    background: "color-mix(in srgb, var(--foreground) 8%, transparent)",
+                    backdropFilter: "blur(12px) saturate(120%)",
+                    WebkitBackdropFilter: "blur(12px) saturate(120%)",
                     padding: "1.5rem",
                     margin: 0,
                     fontSize: "0.875rem",

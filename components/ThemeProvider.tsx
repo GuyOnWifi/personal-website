@@ -6,6 +6,7 @@ import {
     Theme,
     ThemeMode,
     phaseToColors,
+    phaseToOrbs,
     nearestIndex,
     timeToPhase,
 } from "./themeCycle";
@@ -34,6 +35,16 @@ function applyPhase(phase: number) {
     root.style.setProperty("--foreground", c.foreground);
     root.style.setProperty("--accent", c.accent);
     root.style.setProperty("--aurora-opacity", c.aurora.toFixed(3));
+    root.style.setProperty("--star-opacity", c.night.toFixed(3));
+
+    const o = phaseToOrbs(phase);
+    root.style.setProperty("--sun-x", `${o.sunX.toFixed(2)}%`);
+    root.style.setProperty("--sun-y", `${o.sunY.toFixed(2)}%`);
+    root.style.setProperty("--sun-opacity", o.sunOpacity.toFixed(3));
+    root.style.setProperty("--moon-x", `${o.moonX.toFixed(2)}%`);
+    root.style.setProperty("--moon-y", `${o.moonY.toFixed(2)}%`);
+    root.style.setProperty("--moon-opacity", o.moonOpacity.toFixed(3));
+
     root.style.colorScheme = c.dark ? "dark" : "light";
     root.setAttribute("data-theme", ANCHORS[c.nearest].name);
 }

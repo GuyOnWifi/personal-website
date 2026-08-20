@@ -169,6 +169,7 @@ export interface RenderedTheme {
     dark: boolean;
     nearest: number; // index of nearest anchor
     aurora: number; // 0..1 strength of the aurora shimmer overlay
+    night: number; // 0..1 how dark the sky is (drives the starfield)
 }
 
 const wrap = (p: number) => ((p % 1) + 1) % 1;
@@ -231,7 +232,54 @@ export function phaseToColors(phase: number): RenderedTheme {
         dark: t < 0.5 ? a.dark : b.dark,
         nearest: nearestIndex(phase),
         aurora,
+        night: darkness,
     };
+}
+
+// ---- sun / moon that ride the cycle ------------------------------------
+
+export interface SkyOrbs {
+    sunX: number;
+    sunY: number;
+    sunOpacity: number;
+    moonX: number;
+    moonY: number;
+    moonOpacity: number;
+}
+
+// vertical arc in viewport-top %: low at the horizon, high at the zenith.
+const arcY = (t: number) => 74 - Math.sin(Math.PI * t) * 62;
+// fade the orb in/out near the horizon ends of its window.
+const edgeFade = (t: number) => clamp01(Math.min(t, 1 - t) / 0.1);
+
+export function phaseToOrbs(phase: number): SkyOrbs {
+    const p = wrap(phase);
+    const SUN_START = 0;
+    const SUN_END = 2 / 6; // sunrise -> noon -> sunset
+
+    let sunX = 50,
+        sunY = 14,
+        sunOpacity = 0;
+    if (p >= SUN_START && p <= SUN_END) {
+        const t = (p - SUN_START) / (SUN_END - SUN_START);
+        sunX = 8 + t * 84;
+        sunY = arcY(t);
+        sunOpacity = edgeFade(t);
+    }
+
+    const MOON_START = 2 / 6;
+    const MOON_END = 1; // dusk -> midnight -> pre-dawn (wraps to sunrise)
+    let moonX = 50,
+        moonY = 14,
+        moonOpacity = 0;
+    if (p >= MOON_START && p <= MOON_END) {
+        const t = (p - MOON_START) / (MOON_END - MOON_START);
+        moonX = 8 + t * 84;
+        moonY = arcY(t);
+        moonOpacity = edgeFade(t);
+    }
+
+    return { sunX, sunY, sunOpacity, moonX, moonY, moonOpacity };
 }
 
 // ---- local time -> phase -----------------------------------------------

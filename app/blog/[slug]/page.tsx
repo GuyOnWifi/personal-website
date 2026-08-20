@@ -2,8 +2,10 @@ import fs from "fs";
 import path from "path";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
+import rehypeSidenotes from "@/lib/rehypeSidenotes";
 import "katex/dist/katex.min.css";
 import CodeBlock from "@/components/CodeBlock";
 import Link from "next/link";
@@ -143,8 +145,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                     __html: `.katex { color: inherit !important; }`,
                 }} />
                 <ReactMarkdown
-                    remarkPlugins={[remarkMath]}
-                    rehypePlugins={[rehypeRaw, rehypeKatex]}
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeRaw, rehypeSidenotes, rehypeKatex]}
                     components={{
                         h1: ({ ...props }) => <h1 className="text-3xl font-bold text-foreground mt-12 mb-6" {...props} />,
                         h2: ({ ...props }) => <h2 className="text-2xl font-bold text-foreground mt-10 mb-4" {...props} />,
@@ -168,6 +170,25 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         // fenced code returns its own CodeBlock card, so the wrapping
                         // <pre> just passes through (no nested card/background).
                         pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+                        // GFM tables: wide ones (the benchmark results) scroll
+                        // inside their own box so the page never scrolls sideways.
+                        table: ({ ...props }) => (
+                            <div className="my-8 overflow-x-auto rounded-xl border border-foreground/10">
+                                <table className="w-full border-collapse text-sm" {...props} />
+                            </div>
+                        ),
+                        thead: ({ ...props }) => (
+                            <thead className="border-b border-foreground/15" {...props} />
+                        ),
+                        tr: ({ ...props }) => (
+                            <tr className="border-b border-foreground/5 last:border-0" {...props} />
+                        ),
+                        th: ({ ...props }) => (
+                            <th className="px-4 py-2.5 text-left font-semibold whitespace-nowrap" {...props} />
+                        ),
+                        td: ({ ...props }) => (
+                            <td className="px-4 py-2.5 align-top" {...props} />
+                        ),
                         blockquote: ({ ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
                             <blockquote className="border-l-4 border-accent pl-6 py-2 italic opacity-80 my-8 bg-foreground/[0.02] rounded-r-lg" {...props} />
                         ),

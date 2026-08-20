@@ -97,3 +97,110 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .aurora-band { animation: none; }
 }
+
+/* ---- night starfield (whole-page), gated by --star-opacity ---- */
+.starfield {
+  opacity: var(--star-opacity, 0);
+  transition: opacity 1.2s ease;
+}
+.star-dot {
+  position: absolute;
+  border-radius: 9999px;
+  background: #ffffff;
+  opacity: var(--star-base, 0.5);
+  animation-name: star-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes star-twinkle {
+  0%, 100% { opacity: calc(var(--star-base, 0.5) * 0.25); }
+  50% { opacity: var(--star-base, 0.5); }
+}
+
+/* ---- film grain to break up gradient banding ---- */
+.grain {
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star-dot { animation: none; }
+}
+
+/* ---- tufte-style sidenotes (see lib/rehypeSidenotes.ts) ----
+   `[^1]` footnotes in a post render as numbered notes floating in the right
+   gutter. The gutter only exists once the viewport is wider than the max-w-2xl
+   column plus a note, so below that they collapse to a tap-to-expand aside. */
+.blog-content {
+  counter-reset: sidenote-counter;
+  --sidenote-width: 14rem;
+  --sidenote-gap: 2rem;
+}
+
+.blog-content .sidenote-number {
+  counter-increment: sidenote-counter;
+  cursor: pointer;
+}
+
+.blog-content .sidenote-number::after {
+  content: counter(sidenote-counter);
+  font-size: 0.7em;
+  vertical-align: super;
+  line-height: 0;
+  margin-left: 0.1em;
+  color: var(--accent);
+}
+
+.blog-content .sidenote::before {
+  content: counter(sidenote-counter) " ";
+  color: var(--accent);
+}
+
+.blog-content .sidenote,
+.blog-content .marginnote {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+/* first paragraph stays inline so it sits beside the note's number */
+.blog-content .sidenote-para {
+  display: block;
+  margin-top: 0.6em;
+}
+.blog-content .sidenote-para:first-child {
+  display: inline;
+  margin-top: 0;
+}
+
+/* the checkbox only exists to drive the narrow-screen toggle */
+.blog-content input.margin-toggle { display: none; }
+
+@media (min-width: 1240px) {
+  .blog-content .sidenote,
+  .blog-content .marginnote {
+    float: right;
+    clear: right;
+    position: relative;
+    width: var(--sidenote-width);
+    margin-right: calc(-1 * (var(--sidenote-width) + var(--sidenote-gap)));
+    margin-top: 0.35rem;
+    margin-bottom: 1.2rem;
+    text-align: left;
+  }
+}
+
+@media (max-width: 1239px) {
+  .blog-content .sidenote { display: none; }
+  .blog-content .margin-toggle:checked + .sidenote,
+  .blog-content .marginnote {
+    display: block;
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--foreground) 4%, transparent);
+    border-radius: 0 0.5rem 0.5rem 0;
+  }
+}

@@ -6,6 +6,10 @@ import type { Metadata } from "next";
 import matter from "gray-matter";
 import RecentNotes from "@/components/RecentNotes";
 
+// render at request time so the notes card never depends on a build-time fetch
+// reaching the Quartz feed (the fetch itself is still cached for an hour).
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
     title: "writing",
     description: "notes on software, deep learning, and side projects.",

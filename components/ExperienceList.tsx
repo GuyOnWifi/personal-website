@@ -31,9 +31,12 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
                 {items.map((item, index) => (
                     <motion.div
                         key={index}
+                        // `animate`, not `whileInView`. This list is above the
+                        // fold, and gating it on an IntersectionObserver meant
+                        // the server-rendered opacity:0 could survive whenever
+                        // the observer didn't fire, leaving the text invisible.
                         initial={{ opacity: 0, x: -10 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true }}
+                        animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.1 }}
                         className="group"
                     >
