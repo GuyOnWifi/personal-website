@@ -15,7 +15,7 @@ I'll start with the naive implementation and create step by step incremental opt
 | Implementation                                            | Time (ms) | GFLOPS   | % of OpenBLAS |
 | --------------------------------------------------------- | --------- | -------- | ------------- |
 | **OpenBLAS for 1024x1024 (single-threaded)**              | **6.61**  | **325**  | **100%**      |
-| Naive (1024 x 1024)                                       | 269       | 7.98     | 2.46%         |
+| Naive (1024 x 1024)                                       | 269       | 8        | 2.46%         |
 | Cache Aware (1024 x 1024)                                 | 26.0      | 83       | 25.54%        |
 | **OpenBLAS (4096x4096, single-threaded)**                 | **414**   | **332**  | **100%**      |
 | Register Tiling (4096x4096)                               | 964       | 143      | 43.07%        |
@@ -24,7 +24,7 @@ I'll start with the naive implementation and create step by step incremental opt
 | Optimized sequential packing (4096x4096)                  | 437       | 315      | 94.88%        |
 | **OpenBLAS (4096x4096, multi-threaded)**                  | **43.7**  | **3142** | **78.71%**    |
 | **OpenBLAS (4096x4096, tuned with 16 threads + taskset)** | **34.4**  | **4001** | **100%**      |
-| Multithreading + auto-tuning (4096x4096)                  | 33.4      | 4120     | 103%          |
+| **Multithreading + auto-tuning (4096x4096)**              | **33.4**  | **4120** | **103%**      |
 
 I organized this table to compare relative to the appropriate OpenBLAS routine (single vs multithreaded).[^27] Or else the table would look like a sudden 16x jump, even though we're actually working our way up the optimizing ladder!
 
