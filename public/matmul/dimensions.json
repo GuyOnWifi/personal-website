@@ -1,0 +1,102 @@
+{
+ "/matmul/b-panel-eviction.webp": {
+  "h": 390,
+  "w": 1297
+ },
+ "/matmul/blis-data-movement.webp": {
+  "h": 1150,
+  "w": 1266
+ },
+ "/matmul/blocking-sweep.webp": {
+  "h": 702,
+  "w": 1600
+ },
+ "/matmul/c-macrotile-reuse.webp": {
+  "h": 334,
+  "w": 707
+ },
+ "/matmul/cache-aware-loop-order.webp": {
+  "h": 309,
+  "w": 1033
+ },
+ "/matmul/cache-direct-mapped.webp": {
+  "h": 460,
+  "w": 783
+ },
+ "/matmul/cache-fully-associative.webp": {
+  "h": 455,
+  "w": 783
+ },
+ "/matmul/cache-overflow-dram.webp": {
+  "h": 815,
+  "w": 1600
+ },
+ "/matmul/cache-set-associative.webp": {
+  "h": 713,
+  "w": 783
+ },
+ "/matmul/clock-and-temperature.webp": {
+  "h": 700,
+  "w": 1400
+ },
+ "/matmul/full-2d-tiling.webp": {
+  "h": 815,
+  "w": 1600
+ },
+ "/matmul/full-kernel-memory-tiers.webp": {
+  "h": 1269,
+  "w": 1600
+ },
+ "/matmul/k-cache-tiling.webp": {
+  "h": 509,
+  "w": 1367
+ },
+ "/matmul/loop-order-options.webp": {
+  "h": 665,
+  "w": 1600
+ },
+ "/matmul/macrokernel-a-in-l2.webp": {
+  "h": 1061,
+  "w": 1600
+ },
+ "/matmul/macrokernel-b-in-l1.webp": {
+  "h": 1024,
+  "w": 1600
+ },
+ "/matmul/matmul-shape.webp": {
+  "h": 259,
+  "w": 961
+ },
+ "/matmul/microkernel-broadcast.webp": {
+  "h": 778,
+  "w": 1567
+ },
+ "/matmul/naive-loop-order.webp": {
+  "h": 309,
+  "w": 1047
+ },
+ "/matmul/packing-order.webp": {
+  "h": 431,
+  "w": 974
+ },
+ "/matmul/packing-scratch-buffer.webp": {
+  "h": 341,
+  "w": 1186
+ },
+ "/matmul/register-tiling.webp": {
+  "h": 509,
+  "w": 1241
+ },
+ "/matmul/thread-split-rows-cols.webp": {
+  "h": 434,
+  "w": 1023
+ },
+ "/matmul/topology-lstopo-l3.webp": {
+  "h": 790,
+  "w": 1327
+ },
+ "/matmul/topology-lstopo.webp": {
+  "h": 790,
+  "w": 1327
+ }
+}

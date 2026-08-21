@@ -21,6 +21,22 @@ function slugToTitle(slug: string) {
         .join(" ");
 }
 
+/**
+ * Intrinsic image sizes, keyed by src, written by the writeup converter.
+ * Optional: posts whose images are remote (or predate the manifest) just render
+ * without width/height, exactly as before.
+ */
+function loadImageSizes(): Record<string, { w: number; h: number }> {
+    const manifest = path.join(process.cwd(), "public", "matmul", "dimensions.json");
+    if (!fs.existsSync(manifest)) return {};
+    try {
+        return JSON.parse(fs.readFileSync(manifest, "utf-8"));
+    } catch {
+        return {};
+    }
+}
+const imageSizes = loadImageSizes();
+
 interface PostMeta {
     title?: string;
     description?: string;
@@ -192,12 +208,26 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         blockquote: ({ ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
                             <blockquote className="border-l-4 border-accent pl-6 py-2 italic opacity-80 my-8 bg-foreground/[0.02] rounded-r-lg" {...props} />
                         ),
-                        img: ({ ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
-                            <span className="block my-10">
-                                <img className="rounded-2xl shadow-lg w-full" {...props} alt={props.alt || "Blog image"} />
-                                {props.alt && <span className="block text-center text-sm opacity-50 mt-4 italic">{props.alt}</span>}
-                            </span>
-                        ),
+                        img: ({ ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
+                            // Intrinsic size, when we know it, lets the browser
+                            // reserve the right box before the image arrives --
+                            // otherwise a 25-figure post reflows 25 times.
+                            const size = typeof props.src === "string" ? imageSizes[props.src] : undefined;
+                            return (
+                                <span className="block my-10">
+                                    <img
+                                        className="rounded-2xl shadow-lg w-full h-auto"
+                                        loading="lazy"
+                                        decoding="async"
+                                        width={size?.w}
+                                        height={size?.h}
+                                        {...props}
+                                        alt={props.alt || "Blog image"}
+                                    />
+                                    {props.alt && <span className="block text-center text-sm opacity-50 mt-4 italic">{props.alt}</span>}
+                                </span>
+                            );
+                        },
                         a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-accent hover:underline transition-colors" {...props} />,
                     }}
                 >
