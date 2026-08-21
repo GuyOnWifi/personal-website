@@ -1,8 +1,9 @@
 ---
 title: optimizing matmul on a ryzen 9950x
-description: Another optimizing matmul guide
+description: 0->103% of openblas, featuring the latest avx512 instructions
 date: 2026-08-20
 tags: [c++, simd, performance, cpu architecture]
+image: /matmul/og-card.png
 ---
 
 Matrix multiplication is a simple algorithm: `result[r][c] += left[r][k] * right[k][c]`. So why is the simple implementation over 500x worse than the optimized one? In this worklog, I'll be covering many core systems concepts, including caches, intrinsics, SIMD and multithreading.[^29]

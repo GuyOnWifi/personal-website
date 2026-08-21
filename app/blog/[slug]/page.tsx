@@ -39,6 +39,7 @@ const imageSizes = loadImageSizes();
 
 interface PostMeta {
     title?: string;
+    image?: string;
     description?: string;
     date?: string;
     tags?: string[];
@@ -76,10 +77,14 @@ export async function generateMetadata({
             .slice(0, 160) ||
         `${title}. a post by eason huang.`;
     const url = `/blog/${slug}`;
+    const ogImage = meta.image || "/og.png";
     return {
         title,
         description,
         alternates: { canonical: url },
+        // Next replaces these blocks rather than merging them, so the image and
+        // handle from the root layout have to be restated here or posts unfurl
+        // as a bare text card. `image` in frontmatter overrides per post.
         openGraph: {
             type: "article",
             url,
@@ -88,11 +93,14 @@ export async function generateMetadata({
             authors: ["eason huang"],
             publishedTime: meta.date,
             tags: meta.tags,
+            images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
         },
         twitter: {
             card: "summary_large_image",
             title: `${title} by eason huang`,
             description,
+            images: [ogImage],
+            creator: "@guyonwifi",
         },
     };
 }
