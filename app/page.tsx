@@ -38,11 +38,11 @@ export default function Home() {
       company: "Schulich Leader",
       icon: "/schulich.svg",
       link: "https://schulichleaders.com/nominees/?sq=Eason+Huang#students",
-      description: <>for computer engineering at uoft</>,
+      description: "for computer engineering at uoft (declined)",
       type: "job" as const,
     },
     {
-      title: "Technical Lead",
+      title: "Technical Lead & Co-Founder",
       company: "Factful",
       description:
         "developed LLM powered fact checking tool; scaled to 20k+ visits; declined $150k to continue high school; finalist a16z",
@@ -56,6 +56,14 @@ export default function Home() {
       description: "started my love for arch linux",
       icon: "/picoctf.svg",
       link: "https://picoctf.org",
+      type: "job" as const,
+    },
+    {
+      title: "Optimizing Matmul",
+      company: "Writeup",
+      description:
+        "beat OpenBLAS by 3% on a Ryzen 9950X with AVX-512, cache tiling and multithreading.",
+      link: "/blog/optimizing_matmul",
       type: "job" as const,
     },
     {
