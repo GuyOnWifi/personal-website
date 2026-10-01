@@ -34,6 +34,15 @@ export default function Home() {
 
   const previousItems = [
     {
+      title: "won",
+      company: "Hack the North",
+      icon: "/htn.svg",
+      link: "https://x.com/GuyOnWifi/status/2102046930188587292",
+      description:
+        "ai agents to turn natural language into lego designs (inbound vc interest)",
+      type: "job" as const,
+    },
+    {
       title: "named",
       company: "Schulich Leader",
       icon: "/schulich.svg",
