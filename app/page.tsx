@@ -37,6 +37,7 @@ export default function Home() {
       title: "won",
       company: "Hack the North",
       icon: "/htn.svg",
+      iconMono: true,
       link: "https://x.com/GuyOnWifi/status/2102046930188587292",
       description:
         "ai agents to turn natural language into lego designs (inbound vc interest)",

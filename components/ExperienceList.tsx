@@ -9,6 +9,8 @@ interface ExperienceItem {
     company: string;
     description?: React.ReactNode;
     icon?: string;
+    // single-colour logo: painted with the theme's foreground instead of its own fill
+    iconMono?: boolean;
     link?: string;
     type: "job" | "project" | "header";
 }
@@ -50,7 +52,17 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
                                 <div className="flex flex-col">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className="opacity-70">{item.title}</span>
-                                        {item.icon && (
+                                        {item.icon && item.iconMono ? (
+                                            <span
+                                                role="img"
+                                                aria-label={`${item.company || item.title} logo`}
+                                                className="w-5 h-5 bg-foreground"
+                                                style={{
+                                                    mask: `url(${item.icon}) center / contain no-repeat`,
+                                                    WebkitMask: `url(${item.icon}) center / contain no-repeat`,
+                                                }}
+                                            />
+                                        ) : item.icon && (
                                             <Image
                                                 src={item.icon}
                                                 alt={`${item.company || item.title} logo`}
