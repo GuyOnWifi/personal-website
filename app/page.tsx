@@ -10,6 +10,15 @@ export default function Home() {
       link: "https://uwaterloo.ca",
       type: "job" as const,
     },
+    {
+      title: "Research Engineer @",
+      company: "WAT.ai",
+      description:
+        "adaptive inference for tts models: teaching them to think hard only when they need to.",
+      icon: "/watai.png",
+      link: "https://watai.ca",
+      type: "job" as const,
+    },
   ];
 
   const buildingItems = [
