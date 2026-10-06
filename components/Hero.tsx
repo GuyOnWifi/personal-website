@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 interface StarProps {
@@ -12,17 +11,21 @@ interface StarProps {
     delay: number;
 }
 
+// One composited CSS twinkle per star. The keyframes live in globals.css
+// (hero-star-twinkle) so the browser, not Framer Motion's JS loop, drives them.
 const Star: React.FC<StarProps> = ({ top, left, size, duration, delay }) => (
-    <motion.div
-        className="absolute rounded-full bg-white"
-        style={{ top, left, width: size, height: size }}
-        animate={{ opacity: [0.2, 0.8, 0.2], scale: [1, 1.2, 1] }}
-        transition={{
-            duration,
-            delay,
-            repeat: Infinity,
-            ease: "easeInOut",
-        }}
+    <span
+        className="hero-star"
+        style={
+            {
+                top,
+                left,
+                width: size,
+                height: size,
+                "--d": `${duration}s`,
+                "--delay": `${delay}s`,
+            } as React.CSSProperties
+        }
     />
 );
 
@@ -33,16 +36,31 @@ interface NodeProps {
     delay?: number;
 }
 
+// The radius pulse is SMIL (declarative, runs off the JS main thread); the
+// opacity pulse is CSS. Together they reproduce the old Framer animation.
 const ConstellationNode: React.FC<NodeProps> = ({ cx, cy, duration = 1.5, delay = 0 }) => (
-    <motion.circle
+    <circle
         cx={cx}
         cy={cy}
         r="4"
         fill="white"
-        animate={{ opacity: [0.5, 1, 0.5], r: [3, 5, 3] }}
-        transition={{ duration, delay, repeat: Infinity, ease: "easeInOut" }}
-        style={{ filter: "drop-shadow(0px 0px 4px rgba(255, 255, 255, 0.8))" }}
-    />
+        className="hero-node"
+        style={
+            {
+                filter: "drop-shadow(0px 0px 4px rgba(255, 255, 255, 0.8))",
+                "--d": `${duration}s`,
+                "--delay": `${delay}s`,
+            } as React.CSSProperties
+        }
+    >
+        <animate
+            attributeName="r"
+            values="3;5;3"
+            dur={`${duration}s`}
+            begin={`${delay}s`}
+            repeatCount="indefinite"
+        />
+    </circle>
 );
 
 const NODE_COORDS: { cx: number; cy: number }[] = [
@@ -128,7 +146,10 @@ export default function Hero() {
     // n
     const nPath = "M 680 260 L 680 190 L 730 220 L 730 260";
 
-    const drawTransition = { duration: 3, ease: "easeInOut" as const };
+    // Every character path draws itself once on mount. `pathLength={1}`
+    // normalises the dash geometry, so CSS can animate stroke-dashoffset 1 -> 0
+    // (see .hero-path in globals.css) instead of Framer animating pathLength.
+    const paths = [ePath, aPath, sPath, oPath, nPath];
 
     return (
         <div className="relative h-[240px] w-full overflow-hidden rounded-2xl bg-foreground/[0.04] backdrop-blur-sm border border-foreground/10 box-content">
@@ -145,66 +166,23 @@ export default function Hero() {
                     preserveAspectRatio="xMidYMid meet"
                 >
                     <g transform="translate(500, 250) scale(2) translate(-490, -225)">
-                        {/* e */}
-                        <motion.path
-                            d={ePath}
-                            stroke="var(--accent)"
-                            strokeWidth="2"
-                            strokeOpacity="0.4"
-                            fill="none"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={drawTransition}
-                        />
-                        {/* a */}
-                        <motion.path
-                            d={aPath}
-                            stroke="var(--accent)"
-                            strokeWidth="2"
-                            strokeOpacity="0.4"
-                            fill="none"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={drawTransition}
-                        />
-                        {/* s */}
-                        <motion.path
-                            d={sPath}
-                            stroke="var(--accent)"
-                            strokeWidth="2"
-                            strokeOpacity="0.4"
-                            fill="none"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={drawTransition}
-                        />
-                        {/* o */}
-                        <motion.path
-                            d={oPath}
-                            stroke="var(--accent)"
-                            strokeWidth="2"
-                            strokeOpacity="0.4"
-                            fill="none"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={drawTransition}
-                        />
-                        {/* n */}
-                        <motion.path
-                            d={nPath}
-                            stroke="var(--accent)"
-                            strokeWidth="2"
-                            strokeOpacity="0.4"
-                            fill="none"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={drawTransition}
-                        />
+                        {paths.map((d, i) => (
+                            <path
+                                key={i}
+                                className="hero-path"
+                                d={d}
+                                pathLength={1}
+                                stroke="var(--accent)"
+                                strokeWidth="2"
+                                strokeOpacity="0.4"
+                                fill="none"
+                            />
+                        ))}
                         {/* Twinkling nodes (rendered on top of all paths) */}
                         {twinkles.length > 0 &&
                             NODE_COORDS.map((node, i) => (
                                 <ConstellationNode
-                                    key={`${i}-${twinkles[i].duration}-${twinkles[i].delay}`}
+                                    key={i}
                                     cx={node.cx}
                                     cy={node.cy}
                                     duration={twinkles[i].duration}
@@ -214,21 +192,29 @@ export default function Hero() {
                     </g>
                     {/* Lone big star, rendered outside the scaled group at its raw coords */}
                     {loneStar && (
-                        <motion.circle
-                            key={`lone-${loneStar.cx}-${loneStar.cy}-${loneStar.duration}-${loneStar.delay}`}
+                        <circle
                             cx={loneStar.cx}
                             cy={loneStar.cy}
                             r="7"
                             fill="white"
-                            animate={{ opacity: [0.4, 1, 0.4], r: [6, 9, 6] }}
-                            transition={{
-                                duration: loneStar.duration,
-                                delay: loneStar.delay,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                            }}
-                            style={{ filter: "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.9))" }}
-                        />
+                            className="hero-lone"
+                            style={
+                                {
+                                    filter:
+                                        "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.9))",
+                                    "--d": `${loneStar.duration}s`,
+                                    "--delay": `${loneStar.delay}s`,
+                                } as React.CSSProperties
+                            }
+                        >
+                            <animate
+                                attributeName="r"
+                                values="6;9;6"
+                                dur={`${loneStar.duration}s`}
+                                begin={`${loneStar.delay}s`}
+                                repeatCount="indefinite"
+                            />
+                        </circle>
                     )}
                 </svg>
             </div>

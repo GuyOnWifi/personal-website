@@ -8,8 +8,9 @@ import {
     phaseToColors,
     phaseToOrbs,
     nearestIndex,
-    timeToPhase,
 } from "./themeCycle";
+import { phaseForTime, type Coords } from "./solar";
+import { cachedCoords, resolveCoords } from "./location";
 
 export type { Theme, ThemeMode } from "./themeCycle";
 
@@ -57,12 +58,33 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const phaseRef = useRef(phase);
     const rafRef = useRef<number | undefined>(undefined);
     const autoRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+    // Nearest anchor as of the last React render. Used to skip state updates
+    // for frames that don't change which theme we're on.
+    const lastThemeRef = useRef(nearestIndex(phase));
+    // Visitor location for the solar day cycle; null means "use the fallback
+    // fixed schedule". Resolved silently after mount.
+    const coordsRef = useRef<Coords | null>(null);
+    const modeRef = useRef<ThemeMode>(mode);
+
+    // The phase that matches the real sky right now (or the fixed schedule
+    // before a location resolves).
+    const nowPhase = () => phaseForTime(new Date(), coordsRef.current);
 
     const setPhase = (p: number) => {
         const v = wrap(p);
         phaseRef.current = v;
+        // Paint the frame straight onto <html>. This is what actually moves the
+        // sky/sun/moon. The React state below only feeds the label + code theme.
         applyPhase(v);
-        setPhaseState(v);
+
+        // Only re-render when the nearest anchor changes. Previously every
+        // animation frame called setPhaseState, re-rendering every context
+        // consumer 60x/sec during play/auto for no visual difference.
+        const idx = nearestIndex(v);
+        if (idx !== lastThemeRef.current) {
+            lastThemeRef.current = idx;
+            setPhaseState(v);
+        }
     };
 
     const cancelAnim = () => {
@@ -107,17 +129,27 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const startAuto = () => {
         cancelAnim();
         cancelAuto();
-        tweenTo(timeToPhase(new Date()), false, 900);
+        tweenTo(nowPhase(), false, 900);
         autoRef.current = setInterval(() => {
-            setPhase(timeToPhase(new Date())); // tiny step every tick — imperceptible
+            setPhase(nowPhase()); // tiny step every tick — imperceptible
         }, 30000);
     };
 
     const setMode = (next: ThemeMode) => {
         setModeState(next);
+        modeRef.current = next;
         if (next === "play") {
             startPlay();
         } else if (next === "auto") {
+            // Make sure we have a location; if the lookup is still pending the
+            // sky just follows the fallback schedule until it lands.
+            if (!coordsRef.current) {
+                resolveCoords().then((c) => {
+                    if (!c) return;
+                    coordsRef.current = c;
+                    if (modeRef.current === "auto") tweenTo(nowPhase(), false, 900);
+                });
+            }
             startAuto();
             try {
                 localStorage.setItem("themeMode", "auto");
@@ -137,7 +169,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const toggleTheme = () => {
         cancelAuto();
-        if (mode !== "manual") setModeState("manual");
+        if (mode !== "manual") {
+            setModeState("manual");
+            modeRef.current = "manual";
+        }
         const nextIdx = (nearestIndex(phaseRef.current) + 1) % ANCHORS.length;
         tweenTo(nextIdx / ANCHORS.length, true);
         try {
@@ -146,7 +181,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } catch {}
     };
 
-    // mount: restore saved mode / theme
+    // mount: restore saved mode / theme, then resolve location for the solar sky
     useEffect(() => {
         let initialPhase = 4 / 6;
         let initialMode: ThemeMode = "manual";
@@ -158,16 +193,28 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (savedMode === "auto") initialMode = "auto";
         } catch {}
 
+        // Use a previously cached location immediately, if any.
+        coordsRef.current = cachedCoords();
+
         if (initialMode === "auto") {
             setModeState("auto");
-            setPhase(timeToPhase(new Date()));
+            modeRef.current = "auto";
+            setPhase(nowPhase());
             autoRef.current = setInterval(() => {
-                setPhase(timeToPhase(new Date()));
+                setPhase(nowPhase());
             }, 30000);
         } else {
             setPhase(initialPhase);
         }
         setMounted(true);
+
+        // Resolve the location in the background; when it arrives, snap the sky
+        // to the real solar position (only if we're still following the clock).
+        resolveCoords().then((c) => {
+            if (!c) return;
+            coordsRef.current = c;
+            if (modeRef.current === "auto") tweenTo(phaseForTime(new Date(), c), false, 900);
+        });
 
         return () => {
             cancelAnim();

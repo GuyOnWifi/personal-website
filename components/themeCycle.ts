@@ -282,26 +282,7 @@ export function phaseToOrbs(phase: number): SkyOrbs {
     return { sunX, sunY, sunOpacity, moonX, moonY, moonOpacity };
 }
 
-// ---- local time -> phase -----------------------------------------------
-
-// Anchor wall-clock times, in hours, kept monotonic across midnight:
-//   sunrise 06:00, sunlight 12:00, sunset 18:00, twilight 20:00,
-//   moonlight 24:00 (midnight), starlight 27:00 (03:00), wrap at 30:00 (06:00).
-const ANCHOR_HOURS = [6, 12, 18, 20, 24, 27, 30];
-const ANCHOR_PHASES = [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1];
-
-export function timeToPhase(date: Date): number {
-    const h = date.getHours() + date.getMinutes() / 60;
-    const hc = h < 6 ? h + 24 : h; // map into [6, 30)
-    for (let k = 0; k < ANCHOR_HOURS.length - 1; k++) {
-        if (hc >= ANCHOR_HOURS[k] && hc <= ANCHOR_HOURS[k + 1]) {
-            const span = ANCHOR_HOURS[k + 1] - ANCHOR_HOURS[k];
-            const t = (hc - ANCHOR_HOURS[k]) / span;
-            return wrap(ANCHOR_PHASES[k] + (ANCHOR_PHASES[k + 1] - ANCHOR_PHASES[k]) * t);
-        }
-    }
-    return 0;
-}
+// ---- clock emoji for auto mode -----------------------------------------
 
 const CLOCKS = ["🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"];
 export function clockEmoji(date: Date): string {

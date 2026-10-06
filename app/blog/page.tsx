@@ -6,9 +6,10 @@ import type { Metadata } from "next";
 import matter from "gray-matter";
 import RecentNotes from "@/components/RecentNotes";
 
-// render at request time so the notes card never depends on a build-time fetch
-// reaching the Quartz feed (the fetch itself is still cached for an hour).
-export const dynamic = "force-dynamic";
+// Serve the post list statically and regenerate hourly, instead of
+// re-rendering on every request. The notes feed fetch below carries its own
+// `revalidate`, so a stale or failed fetch self-heals within the hour.
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
     title: "writing",

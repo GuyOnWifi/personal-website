@@ -130,6 +130,7 @@ export default function RootLayout({
           }}
         />
         <ThemeProvider>
+          <div className="sky" aria-hidden="true" />
           <AuroraLayer />
           <Atmosphere />
           <div className="relative z-0 min-h-screen max-w-2xl mx-auto px-4 flex flex-col">
