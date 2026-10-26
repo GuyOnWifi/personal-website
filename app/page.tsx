@@ -86,11 +86,11 @@ export default function Home() {
       type: "job" as const,
     },
     {
-      title: "Neural Network From Scratch",
-      company: "GitHub",
+      title: "CUDA SGEMM on an RTX 3060",
+      company: "Writeup",
       description:
-        "computer vision model for MNIST (98% accuracy) with 1000x speedup via vectorization.",
-      link: "https://github.com/GuyOnWifi/neural-net",
+        "0 → 110% of cuBLAS on a consumer card, and the ncu work it took.",
+      link: "/blog/gpu_matmul",
       type: "job" as const,
     },
   ];
