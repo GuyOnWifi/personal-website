@@ -8,6 +8,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSidenotes from "@/lib/rehypeSidenotes";
 import "katex/dist/katex.min.css";
 import CodeBlock from "@/components/CodeBlock";
+import BlogVideo from "@/components/BlogVideo";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -236,6 +237,9 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                 </span>
                             );
                         },
+                        video: ({ src, poster }: React.VideoHTMLAttributes<HTMLVideoElement>) => (
+                            <BlogVideo src={typeof src === "string" ? src : undefined} poster={poster} />
+                        ),
                         a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-accent hover:underline transition-colors" {...props} />,
                     }}
                 >

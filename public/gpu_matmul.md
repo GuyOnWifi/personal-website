@@ -1,7 +1,7 @@
 ---
 title: cuda sgemm on an rtx 3060
-description: 0 → 110% of cuBLAS on a consumer card, and why the last 10% is all stalls.
-date: 2026-10-26
+description: 0 → 110% of cuBLAS on a consumer card.
+date: 2026-10-23
 tags: [cuda, gpu, performance, matmul]
 ---
 
@@ -10,8 +10,7 @@ This blog is mainly just a worklog of me figuring out how GPUs work, through too
 
 Same ladder as [Simon Boehm's](https://siboehm.com/articles/22/CUDA-MMM) blog, but performed on a consumer card and pushing past cuBLAS at the end. 
 
-![beating cuBLAS on one shape: everyone. on the geomean: nobody.](/gpu_matmul/intro.webp)
-Credit: https://x.com/tenderizzation/status/2113415425338097908/photo/1
+![credit: https://x.com/tenderizzation/status/2113415425338097908/photo/1](/gpu_matmul/intro.webp)
 
 We'll be optimizing a hyper-specific kernel, but this will be fun for us because:
 1) big number = good 
@@ -19,11 +18,11 @@ We'll be optimizing a hyper-specific kernel, but this will be fun for us because
 3) a lot of GPU inference / etc. seems to all be writing custom hyper-specific kernels, so this skill is applicable 
 ## Results
 
-FP32 SGEMM, M = N = K = 4096, RTX 3060 (sm_86, 28 SMs), measured with nvbench (GPU time).[^3] Clocks are locked at 1905MHz, and correctness is tested with a tolerance against cuBLAS[^14]. 
+FP32 SGEMM, M = N = K = 4096, RTX 3060 (sm_86, 28 SMs), measured with nvbench ([benches.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/benches.cu), [tests.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/tests.cu)). Clocks are locked at 2002MHz, and correctness is checked against cuBLAS (rtol 1e-2, atol 1e-3).
 
 | Rung                  | Runtime      | FLOP/s     | % of cuBLAS |
 | --------------------- | ------------ | ---------- | ----------- |
-| **cuBLAS (FP32)**[^4] | 15.81 ms     | 8.69 T     | **100%**    |
+| **cuBLAS (FP32)** | 15.81 ms     | 8.69 T     | **100%**    |
 | 01 Naive              | 1277 ms      | 0.108 T    | 1.2%        |
 | 02 GMEM Coalesced     | 206.35 ms    | 0.666 T    | 7.7%        |
 | 03 SMEM               | 129.89 ms    | 1.06 T     | 12.2%       |
@@ -243,7 +242,7 @@ Look at the SASS:
 /*07a0*/  EXIT ;
 ```
 
-`ptxas` vectorized the B loads into `LDS.128` — probably because the SMEM addresses are provably aligned. Pretty cool![^16]
+`ptxas` vectorized the B loads into `LDS.128`, probably because the SMEM addresses are provably aligned. Pretty cool![^16]
 
 Now we can start looking at the individual warps in more detail:
 ```text
@@ -271,9 +270,7 @@ We'll have each thread calculate a strip of C. [^7]
 
 We'll define 4 new variables: `m_thread` for how many elements each thread calculates, `m_block`, `n_block`, `k_block` for the size of the SMEM tile. 
 
-<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline controls preload="metadata" poster="/gpu_matmul/blocktiling-1d.webp">
-  <source src="/gpu_matmul/blocktiling-1d.mp4" type="video/mp4" />
-</video>
+<video src="/gpu_matmul/blocktiling-1d.mp4" poster="/gpu_matmul/blocktiling-1d.webp"></video>
 
 This way, we load $m_{thread}$ elements and one element from B to produce $m_{thread}$ elements, which is a much closer-to-one ratio. 
 
@@ -314,9 +311,7 @@ Now that we have so many knobs, we're going to autotune and search for the best 
 
 Let's extend the previous approach for even more reuse. Why limit ourselves to a strip? We create an `m_thread x n_thread` tile instead. It would also allow for massive reuse, because we perform (m + n) loads on `m x n` data, as opposed to (m + 1) loads on m data.[^8]
 
-<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline controls preload="metadata" poster="/gpu_matmul/blocktiling-2d.webp">
-  <source src="/gpu_matmul/blocktiling-2d.mp4" type="video/mp4" />
-</video>
+<video src="/gpu_matmul/blocktiling-2d.mp4" poster="/gpu_matmul/blocktiling-2d.webp"></video>
 
 Looking at the WarpStateStats:
 ```text
@@ -378,7 +373,7 @@ Each bank serves its own addresses. For example, bank 0 serves all addresses whe
 ![one word per bank is one wavefront; 32 threads on one bank is 32.](/gpu_matmul/wavefronts.webp)
 So if each thread requests a word from a different bank, we get maximum throughput. Note that this is requesting contiguous chunks of memory. 
 
-If all the threads request the same bank at different addresses, the wavefronts serialize — up to 32 passes. This happens if the access pattern within-warp is strided. 
+If all the threads request the same bank at different addresses, the wavefronts serialize, up to 32 passes. This happens if the access pattern within-warp is strided. 
 
 Now look at our inner pattern loop: 
 ```cpp
@@ -391,7 +386,7 @@ for (int idx_n = 0; idx_n < n_thread; idx_n++) {
 }
 ```
 
-Because of our autotuned parameters, `trow_c` is `0` for threads $0-15$ and `1` for threads $16-31$ in a warp. With `m_thread = 8` and `k_block = 8`, those two values are 64 words apart — the same bank. So even though each instruction only asks for 2 distinct values, it still takes 2 passes. 
+Because of our autotuned parameters, `trow_c` is `0` for threads $0-15$ and `1` for threads $16-31$ in a warp. With `m_thread = 8` and `k_block = 8`, those two values are 64 words apart, which is the same bank. So even though each instruction only asks for 2 distinct values, it still takes 2 passes. 
 
 cacheN is worse: `tcol_c` runs 0-15 and the stride is `n_thread = 8`, so columns $0, 4, 8, 12$ land on the same bank (and $1, 5, 9, 13$ do too). That's 4 wavefronts for 16 distinct values. 
 
@@ -479,9 +474,7 @@ The real improvement comes from warptiling. With the knowledge of shared memory 
 
 Hopefully this animation can convey the intent: 
 
-<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline controls preload="metadata" poster="/gpu_matmul/warptiling.webp">
-  <source src="/gpu_matmul/warptiling.mp4" type="video/mp4" />
-</video>
+<video src="/gpu_matmul/warptiling.mp4" poster="/gpu_matmul/warptiling.webp"></video>
 
 We assign a specific tile to a warp so the threads will work in a way that is contiguous in memory.[^11]
 
@@ -545,7 +538,7 @@ Of course, it's important to talk about the number of kernels we've gone through
 
 I tried prefetching the *entire* SMEM tile. During the iteration, it would load the next k-tile. It also removes a barrier: with two buffers you only need the read-after-write sync, not the write-after-read one. However, because the store to SMEM was struck waiting on the load from GMEM, it only increased Long Scoreboard (GMEM) stalls. That's why splitting it up into two stages was the fix. 
 
-Another version I tried was prefetching the next registers from SMEM. This worked — 102%. It couldn't go further because it hides shared-memory latency, while the bigger stall was global memory. 
+Another version I tried was prefetching the next registers from SMEM. This worked: 102%. It couldn't go further because it hides shared-memory latency, while the bigger stall was global memory. 
 
 ### cp.async 
 
@@ -580,10 +573,6 @@ All code can be found here: https://github.com/GuyOnWifi/gpu-matmul-rung
 
 [^2]: [01_naive.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/01_naive.cu)
 
-[^3]: Benchmark / test harness: [benches.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/benches.cu), [tests.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/tests.cu)
-
-[^4]: cuBLAS baseline: [00_cublas.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/00_cublas.cu)
-
 [^5]: [02_gmem.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/02_gmem.cu)
 
 [^6]: [03_smem.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/03_smem.cu)
@@ -601,8 +590,6 @@ All code can be found here: https://github.com/GuyOnWifi/gpu-matmul-rung
 [^12]: [09_prefetch.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/09_prefetch.cu)
 
 [^13]: [10_prefetch_reg.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/10_prefetch_reg.cu)
-
-[^14]:  (rtol 1e-2, atol 1e-3)
 
 [^15]: Older architectures and guides say "in lockstep". This is not tree for architectures past Volta, where each thread can have an independent program counter. However, its usually helpful to try and have them execute in lockstep (avoiding conditionals, etc) since warp divergence can be nasty.
 
