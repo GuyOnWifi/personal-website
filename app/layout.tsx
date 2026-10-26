@@ -54,7 +54,10 @@ export const metadata: Metadata = {
     types: {
       "application/rss+xml": [
         { url: "/blog/feed.xml", title: "eason huang — blog" },
-        { url: "https://notes.easonhuang.dev/index.xml", title: "eason huang — notes" },
+        {
+          url: "https://notes.easonhuang.dev/index.xml",
+          title: "eason huang — notes",
+        },
       ],
     },
   },
@@ -120,7 +123,7 @@ export default function RootLayout({
               "@type": "Person",
               name: "eason huang",
               url: SITE_URL,
-              email: "me@easonhuang.dev",
+              email: "easonh887@gmail.com",
               jobTitle: "software engineer",
               sameAs: [
                 "https://github.com/guyonwifi",
@@ -135,9 +138,7 @@ export default function RootLayout({
           <Atmosphere />
           <div className="relative z-0 min-h-screen max-w-2xl mx-auto px-4 flex flex-col">
             <Navigation />
-            <main className="flex-grow">
-              {children}
-            </main>
+            <main className="flex-grow">{children}</main>
             <Footer />
           </div>
         </ThemeProvider>
