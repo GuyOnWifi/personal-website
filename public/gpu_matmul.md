@@ -83,7 +83,7 @@ For the first approach, we'll go the simplest way. Give each thread an independe
 
 Profiling with ncu, we immediately see the glaring issues:
 
-```
+```text
 ncu --kernel-name naiveKernel --launch-count 1 --section MemoryWorkloadAnalysis_Tables
 
 Section: Memory Workload Analysis Tables
@@ -131,7 +131,7 @@ Our next optimization is coalescing. Instead, each block of 32 threads gets hand
 
 Profiling: 
 
-```
+```text
 ncu --kernel-name GMEMCoalescedKernel --launch-count 1 --section SpeedOfLight
 
 ----------------------- ----------- --------------
@@ -153,7 +153,7 @@ Compute (SM) Throughput           %          76.87
 
 L1TEX pressure dropped from 99% to 77%, so the change did something. Here `ncu` is somewhat lying: even though compute throughput is high, we are still definitely memory bound. Look at the breakdown of compute analysis:
 
-```
+```text
 ncu --kernel-name GMEMCoalescedKernel --launch-count 1 --section ComputeWorkloadAnalysis --print-details all 
 
 ---------------- ----------- ------------
@@ -246,7 +246,7 @@ Look at the SASS:
 `ptxas` vectorized the B loads into `LDS.128` — probably because the SMEM addresses are provably aligned. Pretty cool![^16]
 
 Now we can start looking at the individual warps in more detail:
-```
+```text
 ncu --kernel-name SMEMCoalescedKernel --launch-count 1 --section WarpStateStats
 
 Table Name : Warp State (All Cycles)
@@ -271,7 +271,7 @@ We'll have each thread calculate a strip of C. [^7]
 
 We'll define 4 new variables: `m_thread` for how many elements each thread calculates, `m_block`, `n_block`, `k_block` for the size of the SMEM tile. 
 
-<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline poster="/gpu_matmul/blocktiling-1d.webp">
+<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline controls preload="metadata" poster="/gpu_matmul/blocktiling-1d.webp">
   <source src="/gpu_matmul/blocktiling-1d.mp4" type="video/mp4" />
 </video>
 
@@ -279,7 +279,7 @@ This way, we load $m_{thread}$ elements and one element from B to produce $m_{th
 
 In addition, we perform far fewer load instructions per FMA, which will help out our LSU. With the current parameters, we do 24 load instructions for 64 FMAs.
 
-```
+```text
 ncu --kernel-name BlockTiling1D --launch-count 1 --section WarpStateStats
 
 Table Name : Warp State (All Cycles)
@@ -314,12 +314,12 @@ Now that we have so many knobs, we're going to autotune and search for the best 
 
 Let's extend the previous approach for even more reuse. Why limit ourselves to a strip? We create an `m_thread x n_thread` tile instead. It would also allow for massive reuse, because we perform (m + n) loads on `m x n` data, as opposed to (m + 1) loads on m data.[^8]
 
-<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline poster="/gpu_matmul/blocktiling-2d.webp">
+<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline controls preload="metadata" poster="/gpu_matmul/blocktiling-2d.webp">
   <source src="/gpu_matmul/blocktiling-2d.mp4" type="video/mp4" />
 </video>
 
 Looking at the WarpStateStats:
-```
+```text
 ncu --kernel-name BlockTiling2D --launch-count 1 --section WarpStateStats
 
 Table Name : Warp State (All Cycles)
@@ -350,7 +350,7 @@ Stall Tex Throttle              inst            0
 We've finally reduced MIO throttles! [^1]
 
 Looking at the SoL section:
-```
+```text
 ncu --kernel-name BlockTiling2D --launch-count 1 --section SpeedOfLight --print-details all
 
 Table Name : Memory Throughput Breakdown
@@ -402,7 +402,7 @@ cacheN is worse: `tcol_c` runs 0-15 and the stride is `n_thread = 8`, so columns
 We'll do two steps in one here: we'll try to decrease the amount of shared-memory bank conflicts[^9], and we'll try to decrease the amount of global memory requests by issuing a bigger load[^10].
 
 Interestingly, changing layout of `As` in memory actually increased our wavefronts:
-```
+```text
 ncu --kernel-name BlockTiling2DTransposed --launch-count 1 --section SpeedOfLight --print-details all | grep "Data Pipe Lsu Wavefronts"
 
 L1: Data Pipe Lsu Wavefronts                                       %        80.75
@@ -410,7 +410,7 @@ L1: Data Pipe Lsu Wavefronts                                       %        80.7
 
 even though it is a 4.5% speedup! 
 
-```
+```text
 ncu --kernel-name BlockTiling2DTransposed --launch-count 1 --section WarpStateStats
 
     Table Name : Warp State (All Cycles)
@@ -443,7 +443,7 @@ If we sum up 7.16 for BlockTiling2D vs 6.72 for the transposition, that's roughl
 Not too sure what the dispatch stalls could genuinely be - the documentation is vague about it. Closest I could find: https://forums.developer.nvidia.com/t/what-cause-dispatch-stall-how-to-avoid-it/233021/10
 
 While we're here, we should take a look at our GMEM loads. Since we pass pointers, the compiler can't immediately assume they are aligned. We explicitly cast them to `float4` to get a 128-bit load. 
-```
+```text
 ncu --kernel-name VectorizedGMEM --launch-count 1 --section WarpStateStats
 
 Table Name : Warp State (All Cycles)
@@ -479,7 +479,7 @@ The real improvement comes from warptiling. With the knowledge of shared memory 
 
 Hopefully this animation can convey the intent: 
 
-<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline poster="/gpu_matmul/warptiling.webp">
+<video class="w-full rounded-2xl shadow-lg my-10" autoplay loop muted playsinline controls preload="metadata" poster="/gpu_matmul/warptiling.webp">
   <source src="/gpu_matmul/warptiling.mp4" type="video/mp4" />
 </video>
 
@@ -508,7 +508,7 @@ Currently our warps are stalling on a very "bursty workload". Here's what I mean
 
 We can expose more ILP by loading the next iteration's tile as we do our FMAs. This brings us to a final **110%** of cuBLAS, and we can see ncu stats: 
 
-```
+```text
 ncu --kernel-name StagedTpl --launch-count 1 --section WarpStateStats --print-details all
 
 Table Name : Warp State (All Cycles)
@@ -572,35 +572,35 @@ Probably going to try this on Tensor Cores with fp16 datatypes. Tensor Cores are
 All code can be found here: https://github.com/GuyOnWifi/gpu-matmul-rung
 ## Resources
 
-https://modal.com/gpu-glossary - very great for getting started into GPU land. 
-https://siboehm.com/articles/22/CUDA-MMM - the OG 
-https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html - extremely detailed for getting into profiling 
+- https://modal.com/gpu-glossary - very great for getting started into GPU land.
+- https://siboehm.com/articles/22/CUDA-MMM - the OG.
+- https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html - extremely detailed for getting into profiling.
 
 [^1]: You'll notice that Long Scoreboard is down too - that means the warp was stuck waiting for a GMEM request to finish; more reuse means less time is spent roundtripping to GMEM
 
-[^2]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/01_naive.cu)
+[^2]: [01_naive.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/01_naive.cu)
 
-[^3]: Benchmark / test harness: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/benches.cu), [tests](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/tests.cu)
+[^3]: Benchmark / test harness: [benches.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/benches.cu), [tests.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/tests.cu)
 
-[^4]: cuBLAS baseline: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/00_cublas.cu)
+[^4]: cuBLAS baseline: [00_cublas.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/00_cublas.cu)
 
-[^5]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/02_gmem.cu)
+[^5]: [02_gmem.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/02_gmem.cu)
 
-[^6]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/03_smem.cu)
+[^6]: [03_smem.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/03_smem.cu)
 
-[^7]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/04_1d.cu)
+[^7]: [04_1d.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/04_1d.cu)
 
-[^8]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/05_2d.cu)
+[^8]: [05_2d.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/05_2d.cu)
 
-[^9]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/06_2d_transposed.cu)
+[^9]: [06_2d_transposed.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/06_2d_transposed.cu)
 
-[^10]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/07_vectorize.cu)
+[^10]: [07_vectorize.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/07_vectorize.cu)
 
-[^11]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/08_warptiling.cu)
+[^11]: [08_warptiling.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/08_warptiling.cu)
 
-[^12]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/09_prefetch.cu)
+[^12]: [09_prefetch.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/09_prefetch.cu)
 
-[^13]: [code](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/10_prefetch_reg.cu)
+[^13]: [10_prefetch_reg.cu](https://github.com/GuyOnWifi/gpu-matmul-rung/blob/master/impls/10_prefetch_reg.cu)
 
 [^14]:  (rtol 1e-2, atol 1e-3)
 
