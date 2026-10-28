@@ -68,11 +68,11 @@ export default async function BlogListPage() {
                                 {blog.title}
                             </h2>
                             {blog.description && (
-                                <p className="mt-3 opacity-60 text-sm leading-relaxed">
+                                <p className="mt-3 opacity-60 text-base leading-relaxed">
                                     {blog.description}
                                 </p>
                             )}
-                            <div className="mt-4 flex items-center gap-4 text-sm opacity-50">
+                            <div className="mt-4 flex items-center gap-4 text-[0.95rem] opacity-55">
                                 {blog.date && (
                                     <time dateTime={blog.date.toISOString()}>
                                         {blog.date.toLocaleDateString("en-US", {

@@ -51,9 +51,8 @@ function applyPhase(phase: number) {
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [mounted, setMounted] = useState(false);
     const [mode, setModeState] = useState<ThemeMode>("manual");
-    const [phase, setPhaseState] = useState(4 / 6); // moonlight by default
+    const [phase, setPhaseState] = useState(2 / 4); // moonlight by default
 
     const phaseRef = useRef(phase);
     const rafRef = useRef<number | undefined>(undefined);
@@ -183,7 +182,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // mount: restore saved mode / theme, then resolve location for the solar sky
     useEffect(() => {
-        let initialPhase = 4 / 6;
+        let initialPhase = 2 / 4;
         let initialMode: ThemeMode = "manual";
         try {
             const savedMode = localStorage.getItem("themeMode");
@@ -206,7 +205,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } else {
             setPhase(initialPhase);
         }
-        setMounted(true);
 
         // Resolve the location in the background; when it arrives, snap the sky
         // to the real solar position (only if we're still following the clock).
@@ -227,7 +225,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return (
         <ThemeContext.Provider value={{ theme, mode, phase, toggleTheme, setMode }}>
-            {!mounted ? <div style={{ visibility: "hidden" }}>{children}</div> : children}
+            {children}
         </ThemeContext.Provider>
     );
 };

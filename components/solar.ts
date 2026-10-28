@@ -2,17 +2,15 @@
 //
 // The theme ring is driven by a single `phase` in [0,1). Historically that phase
 // came from a fixed clock (sunrise at 06:00, sunset at 18:00), which drifted out
-// of sync with the sun/moon orbs and left the label saying "sunset" for two
-// hours after the sun had set. Here we compute the *real* local solar events
-// from latitude/longitude and an instant, then warp them onto the same ring:
+// of sync with the sky. Here we compute the *real* local solar events from
+// latitude/longitude and an instant, then warp them onto the four-anchor ring:
 //
-//   sunrise -> 0      solar noon      -> 1/6
-//   sunset  -> 2/6    civil dusk      -> 3/6
-//   midnight-> 4/6    civil dawn      -> 5/6
+//   sunrise -> 0      sunset        -> 0       (day stays flat white)
+//   civil dusk -> 1/4  midnight     -> 2/4
+//   civil dawn -> 3/4  next sunrise -> 1
 //
-// Because anchors 0 and 2/6 now sit at the actual horizon crossings, the orb
-// positions and the anchor labels line up with the sky. The palette itself is
-// untouched.
+// Sunlight is a plain light theme, so daylight no longer moves between separate
+// dawn/noon/dusk palettes; the colour lives in twilight and the night anchors.
 //
 // NOAA-style approximations: good to roughly a minute at mid latitudes, which is
 // far more than a background gradient needs. All timestamps are epoch ms, so
@@ -142,11 +140,11 @@ function cyclePoints(noon: number, lat: number): Point[] | null {
     const midnight = noon + 12 * HOUR;
     const raw: (Point | null)[] = [
         { t: here.sunrise, p: 0 },
-        { t: noon, p: 1 / 6 },
-        { t: here.sunset, p: 2 / 6 },
-        here.civilDusk == null ? null : { t: here.civilDusk, p: 3 / 6 },
-        { t: midnight, p: 4 / 6 },
-        next.civilDawn == null ? null : { t: next.civilDawn, p: 5 / 6 },
+        // Daylight is a single flat phase: white from sunrise to sunset.
+        { t: here.sunset, p: 0 },
+        here.civilDusk == null ? null : { t: here.civilDusk, p: 1 / 4 },
+        { t: midnight, p: 2 / 4 },
+        next.civilDawn == null ? null : { t: next.civilDawn, p: 3 / 4 },
         { t: next.sunrise, p: 1 },
     ];
 
@@ -184,16 +182,16 @@ export function solarPhase(instant: number, { lat, lon }: Coords): number | null
         }
     }
     // Polar day/night: hold the sun (or moon) where it actually is.
-    return sunAltitude(instant, lat, lon) > 0 ? 1 / 6 : 4 / 6;
+    return sunAltitude(instant, lat, lon) > 0 ? 0 : 2 / 4;
 }
 
 // ---- fallback: the old fixed schedule ------------------------------------
 // Used before a location resolves, or if geolocation is unavailable. Anchor
 // wall-clock hours kept monotonic across midnight:
-//   sunrise 06, sunlight 12, sunset 18, twilight 20, moonlight 24,
-//   starlight 27, wrap at 30 (= 06:00 again).
-const ANCHOR_HOURS = [6, 12, 18, 20, 24, 27, 30];
-const ANCHOR_PHASES = [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1];
+//   sunrise 06, sunset 18, twilight 20, moonlight 24, starlight 27,
+//   wrap at 30 (= 06:00 again). Daylight (06–18) stays at phase 0.
+const ANCHOR_HOURS = [6, 18, 20, 24, 27, 30];
+const ANCHOR_PHASES = [0, 0, 1 / 4, 2 / 4, 3 / 4, 1];
 const wrap = (p: number) => ((p % 1) + 1) % 1;
 
 export function legacyTimeToPhase(date: Date): number {

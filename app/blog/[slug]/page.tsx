@@ -9,6 +9,8 @@ import rehypeSidenotes from "@/lib/rehypeSidenotes";
 import "katex/dist/katex.min.css";
 import CodeBlock from "@/components/CodeBlock";
 import BlogVideo from "@/components/BlogVideo";
+import BlogImage from "@/components/BlogImage";
+import SvgWindow from "@/components/SvgWindow";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -120,6 +122,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     const meta = data as PostMeta;
     const title = meta.title || slugToTitle(slug);
     const description = meta.description;
+    // A bare <video> inside Markdown is phrasing content, so react-markdown
+    // wraps it in a <p>; mapping it to the block-level player then produces
+    // invalid p > figure markup (and a hydration mismatch). Turn it into a
+    // block-level marker before parsing so the player mounts as a sibling.
+    const renderedContent = content.replace(
+        /<video\b([^>]*)>\s*<\/video>/gi,
+        (_match, attrs: string) => `<div data-blog-video${attrs}></div>`
+    );
     const stat = fs.statSync(filePath);
     const publishedISO = meta.date ? new Date(meta.date).toISOString() : stat.birthtime.toISOString();
     const publishedDate = new Date(publishedISO);
@@ -187,7 +197,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                     {String(children).replace(/\n$/, "")}
                                 </CodeBlock>
                             ) : (
-                                <code className="bg-foreground/10 rounded px-1.5 py-0.5 font-mono text-[0.85em]" {...props}>
+                                <code className="bg-foreground/10 rounded px-1.5 py-0.5 font-mono text-[0.85em] break-words" {...props}>
                                     {children}
                                 </code>
                             );
@@ -199,7 +209,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         // inside their own box so the page never scrolls sideways.
                         table: ({ ...props }) => (
                             <div className="my-8 overflow-x-auto rounded-xl border border-foreground/10">
-                                <table className="w-full border-collapse text-sm" {...props} />
+                                <table className="w-full border-collapse text-base" {...props} />
                             </div>
                         ),
                         thead: ({ ...props }) => (
@@ -221,29 +231,54 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                             // Intrinsic size, when we know it, lets the browser
                             // reserve the right box before the image arrives --
                             // otherwise a 25-figure post reflows 25 times.
-                            const size = typeof props.src === "string" ? imageSizes[props.src] : undefined;
+                            const src = typeof props.src === "string" ? props.src : undefined;
+                            const size = src ? imageSizes[src] : undefined;
+                            const width = size?.w ?? (props.width ? Number(props.width) : undefined);
+                            const height = size?.h ?? (props.height ? Number(props.height) : undefined);
                             return (
-                                <span className="block my-10">
-                                    <img
-                                        className="rounded-2xl shadow-lg w-full h-auto"
-                                        loading="lazy"
-                                        decoding="async"
-                                        width={size?.w}
-                                        height={size?.h}
-                                        {...props}
-                                        alt={props.alt || "Blog image"}
-                                    />
-                                    {props.alt && <span className="block text-center text-sm opacity-50 mt-4 italic">{props.alt}</span>}
-                                </span>
+                                <BlogImage
+                                    src={src}
+                                    alt={props.alt}
+                                    width={width}
+                                    height={height}
+                                />
                             );
+                        },
+                        // Raw HTML escape hatch for video markers. Anything else
+                        // passes through as a normal div so posts can still use
+                        // plain HTML when they need it.
+                        div: ({ ...props }: React.HTMLAttributes<HTMLDivElement> & {
+                            "data-blog-video"?: string;
+                            "data-svg-window"?: string;
+                            "data-caption"?: string;
+                            "data-poster"?: string;
+                            "data-aspect"?: string;
+                            src?: string;
+                            poster?: string;
+                        }) => {
+                            if (props["data-blog-video"] !== undefined) {
+                                return <BlogVideo src={props.src} poster={props.poster} />;
+                            }
+                            const board = props["data-svg-window"];
+                            if (board) {
+                                return (
+                                    <SvgWindow
+                                        src={`/gpu_matmul/boards/${board}.svg`}
+                                        poster={props["data-poster"] ?? ""}
+                                        caption={props["data-caption"]}
+                                        aspect={props["data-aspect"] ?? "16 / 9"}
+                                    />
+                                );
+                            }
+                            return <div {...props} />;
                         },
                         video: ({ src, poster }: React.VideoHTMLAttributes<HTMLVideoElement>) => (
                             <BlogVideo src={typeof src === "string" ? src : undefined} poster={poster} />
                         ),
-                        a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-accent hover:underline transition-colors" {...props} />,
+                        a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-accent hover:underline transition-colors break-words" {...props} />,
                     }}
                 >
-                    {content}
+                    {renderedContent}
                 </ReactMarkdown>
             </article>
 

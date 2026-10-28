@@ -22,14 +22,14 @@ interface ExperienceListProps {
 
 export default function ExperienceList({ items, sectionTitle }: ExperienceListProps) {
     return (
-        <section className="mb-8">
+        <section className="mb-6">
             {sectionTitle && (
-                <h2 className="text-sm font-bold flex items-center gap-2 mb-3">
+                <h2 className="text-base font-bold flex items-center gap-2 mb-2">
                     <span className="text-accent animate-pulse">❄</span> {sectionTitle}
                 </h2>
             )}
 
-            <div className="space-y-3 ml-2">
+            <div className="space-y-2 ml-2">
                 {items.map((item, index) => (
                     <motion.div
                         key={index}
@@ -43,11 +43,11 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
                         className="group"
                     >
                         {item.type === "header" ? (
-                            <div className="italic text-sm opacity-80 mb-2">
+                            <div className="italic text-base opacity-80 mb-2">
                                 {item.title}
                             </div>
                         ) : (
-                            <div className="flex items-start gap-2 text-sm mt-1">
+                            <div className="flex items-start gap-2 text-[1.02rem] mt-1">
                                 <span className="opacity-40 group-hover:opacity-100 transition-opacity mt-1">↳</span>
                                 <div className="flex flex-col">
                                     <div className="flex items-center gap-2 flex-wrap">
@@ -86,7 +86,7 @@ export default function ExperienceList({ items, sectionTitle }: ExperienceListPr
                                         })()}
                                     </div>
                                     {item.description && (
-                                        <p className="opacity-50 mt-1 leading-relaxed text-[13px] max-w-xl">
+                                        <p className="opacity-60 mt-1 leading-relaxed text-[0.9rem] max-w-xl">
                                             {item.description}
                                         </p>
                                     )}

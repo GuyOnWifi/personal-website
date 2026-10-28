@@ -1,15 +1,9 @@
-// The theme system is a continuous ring. Six named anchors sit on it; everything
+// The theme system is a continuous ring. Four named anchors sit on it; everything
 // in between is interpolated in OKLab so transitions stay clean (no muddy browns).
 // A single "phase" in [0,1) drives the whole thing — manual mode snaps to anchors,
 // auto mode derives phase from the local clock, play mode sweeps it around the ring.
 
-export type Theme =
-    | "sunrise"
-    | "sunlight"
-    | "sunset"
-    | "twilight"
-    | "moonlight"
-    | "starlight";
+export type Theme = "sunlight" | "twilight" | "moonlight" | "starlight";
 
 export type ThemeMode = "manual" | "auto" | "play";
 
@@ -25,63 +19,46 @@ interface Anchor {
     accent: string;
 }
 
-// Cycle order = a day-walk: dawn -> noon -> dusk -> nightfall -> pitch black -> aurora -> back to dawn.
+// Cycle order = day -> dusk -> night -> pre-dawn -> back to day. Sunlight is a
+// plain white page; the colour lives in twilight and the night anchors.
 export const ANCHORS: Anchor[] = [
-    {
-        name: "sunrise",
-        emoji: "🌅",
-        dark: false,
-        stops: ["#f7b9c4", "#fcd2b0", "#fdeede"],
-        glow: "#ffd9a8",
-        foreground: "#5a3a38",
-        accent: "#e8794f",
-    },
     {
         name: "sunlight",
         emoji: "☀️",
         dark: false,
-        stops: ["#8fcdf2", "#bfe4f7", "#f6fcff"],
-        glow: "#fff4d6",
-        foreground: "#1b2a3d",
-        accent: "#f3a417",
-    },
-    {
-        name: "sunset",
-        emoji: "🌇",
-        dark: false,
-        stops: ["#ff8a6b", "#ffb778", "#ffe2c2"],
-        glow: "#ffd28a",
-        foreground: "#43221a",
-        accent: "#e0531f",
+        stops: ["#ffffff", "#ffffff", "#ffffff"],
+        glow: "#ffffff",
+        foreground: "#111827",
+        accent: "#b45309",
     },
     {
         name: "twilight",
         emoji: "🌆",
         dark: true,
-        stops: ["#241a44", "#5b2f7a", "#c65a4e"],
-        glow: "#7a4fae",
-        foreground: "#f1e3d4",
-        accent: "#f0894e",
+        stops: ["#2a2447", "#584671", "#a97e8b"],
+        glow: "#6e5690",
+        foreground: "#efe4dc",
+        accent: "#e2a07a",
     },
     {
         name: "moonlight",
         emoji: "🌙",
         dark: true,
-        stops: ["#05060c", "#080a12", "#0e1018"],
-        glow: "#33405e",
-        foreground: "#cdd6e8",
-        accent: "#8fb6dd",
+        stops: ["#060810", "#0b0e1a", "#121626"],
+        glow: "#2e3a55",
+        foreground: "#d3dbea",
+        accent: "#93b8dd",
     },
     {
         name: "starlight",
         emoji: "🌌",
         dark: true,
-        // pre-dawn: deep night up top fading to the first warm light at the horizon,
-        // bridging into sunrise (the next anchor on the ring).
-        stops: ["#070713", "#241a3a", "#5e3a4c"],
-        glow: "#3a2c4e",
-        foreground: "#f3e9ef",
-        accent: "#cf9088",
+        // pre-dawn: deep night up top fading to the first light at the horizon,
+        // bridging into sunlight (the next anchor on the ring).
+        stops: ["#080a16", "#1b1a33", "#37304d"],
+        glow: "#473a63",
+        foreground: "#eee9f3",
+        accent: "#c9a6b8",
     },
 ];
 
@@ -189,7 +166,7 @@ export function nearestIndex(phase: number): number {
     return Math.round(wrap(phase) * ANCHORS.length) % ANCHORS.length;
 }
 
-const STARLIGHT_PHASE = 5 / 6;
+const STARLIGHT_PHASE = 3 / 4;
 
 export function phaseToColors(phase: number): RenderedTheme {
     const n = ANCHORS.length;
@@ -220,9 +197,10 @@ export function phaseToColors(phase: number): RenderedTheme {
 
     // aurora: peaks at starlight, fades across the rest of the night, and is
     // gated by how dark the sky actually is (so it never bleeds into dawn).
-    const proximity = clamp01(1 - ringDist(wrap(phase), STARLIGHT_PHASE) / 0.34);
-    const darkness = clamp01((0.55 - bgL) / 0.45);
-    const aurora = clamp01(proximity * darkness) * 0.9;
+    // Narrower than before so moonlight stays moonlit instead of aurora-washed.
+    const proximity = clamp01(1 - ringDist(wrap(phase), STARLIGHT_PHASE) / 0.26);
+    const darkness = clamp01((0.62 - bgL) / 0.45);
+    const aurora = clamp01(proximity * darkness) * 0.72;
 
     return {
         gradient,
@@ -254,21 +232,10 @@ const edgeFade = (t: number) => clamp01(Math.min(t, 1 - t) / 0.1);
 
 export function phaseToOrbs(phase: number): SkyOrbs {
     const p = wrap(phase);
-    const SUN_START = 0;
-    const SUN_END = 2 / 6; // sunrise -> noon -> sunset
-
-    let sunX = 50,
-        sunY = 14,
-        sunOpacity = 0;
-    if (p >= SUN_START && p <= SUN_END) {
-        const t = (p - SUN_START) / (SUN_END - SUN_START);
-        sunX = 8 + t * 84;
-        sunY = arcY(t);
-        sunOpacity = edgeFade(t);
-    }
-
-    const MOON_START = 2 / 6;
-    const MOON_END = 1; // dusk -> midnight -> pre-dawn (wraps to sunrise)
+    // Sunlight is a flat white theme, so there is no sun orb. The moon rides
+    // the night half of the ring: twilight -> midnight -> pre-dawn.
+    const MOON_START = 1 / 4;
+    const MOON_END = 1;
     let moonX = 50,
         moonY = 14,
         moonOpacity = 0;
@@ -279,7 +246,7 @@ export function phaseToOrbs(phase: number): SkyOrbs {
         moonOpacity = edgeFade(t);
     }
 
-    return { sunX, sunY, sunOpacity, moonX, moonY, moonOpacity };
+    return { sunX: 50, sunY: 14, sunOpacity: 0, moonX, moonY, moonOpacity };
 }
 
 // ---- clock emoji for auto mode -----------------------------------------

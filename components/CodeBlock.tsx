@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { memo, useMemo } from "react";
 // PrismLight, not the full `Prism` build: the latter ships every registered
 // language (cuda, verilog, smalltalk, ...) in one ~636 kB chunk. We register
 // only the languages the posts actually fence.
@@ -42,25 +42,30 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
 
     // Determine if we should use a light or dark style
     const isDark = ["moonlight", "starlight", "twilight"].includes(theme);
-    const baseStyle = isDark ? atomDark : oneLight;
     const resolvedLanguage = LANGUAGE_ALIASES[language] ?? language;
 
     // Create a cleaned version of the style object where background
     // properties are forced to "transparent" without mixing shorthand properties.
-    const cleanedStyle: { [key: string]: React.CSSProperties } = {};
-    Object.keys(baseStyle).forEach((key) => {
-        // Copy, then drop the shorthand so we can force a single transparent
-        // fill without a shorthand/longhand mix.
-        const entry = {
-            ...(baseStyle as Record<string, React.CSSProperties>)[key],
-        };
-        delete entry.background;
-        delete entry.backgroundColor;
-        cleanedStyle[key] = {
-            ...entry,
-            background: "transparent",
-        };
-    });
+    // Memoized because react-syntax-highlighter re-tokenizes on every render;
+    // rebuilding this map as well just adds avoidable work on theme changes.
+    const cleanedStyle = useMemo(() => {
+        const baseStyle = isDark ? atomDark : oneLight;
+        const style: { [key: string]: React.CSSProperties } = {};
+        Object.keys(baseStyle).forEach((key) => {
+            // Copy, then drop the shorthand so we can force a single transparent
+            // fill without a shorthand/longhand mix.
+            const entry = {
+                ...(baseStyle as Record<string, React.CSSProperties>)[key],
+            };
+            delete entry.background;
+            delete entry.backgroundColor;
+            style[key] = {
+                ...entry,
+                background: "transparent",
+            };
+        });
+        return style;
+    }, [isDark]);
 
     return (
         <div className="relative group my-8 blog-code-block">
@@ -74,15 +79,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
                     // Translucent, not a solid fill: the visible sky is the
                     // --bg-gradient, so any opaque colour (or a mix against the
                     // flat --background fallback) reads as a foreign card
-                    // pasted on top. Tinting --foreground at low alpha and
-                    // letting the backdrop-blur show the real gradient through
-                    // keeps it in palette on every theme, light or dark.
+                    // pasted on top. No backdrop-filter here: a 12px blur per
+                    // visible code block was a full-viewport blur on every
+                    // scroll frame for almost no visual difference over the
+                    // smooth sky.
                     background: "color-mix(in srgb, var(--foreground) 8%, transparent)",
-                    backdropFilter: "blur(12px) saturate(120%)",
-                    WebkitBackdropFilter: "blur(12px) saturate(120%)",
                     padding: "1.5rem",
                     margin: 0,
-                    fontSize: "0.875rem",
+                    fontSize: "0.9rem",
                     lineHeight: 1.6,
                 }}
             >
@@ -92,4 +96,4 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
     );
 };
 
-export default CodeBlock;
+export default memo(CodeBlock);

@@ -5,19 +5,23 @@
    --foreground / --accent inline on <html>. The [data-theme] blocks below are
    only flat-color fallbacks to prevent a flash before hydration — each is the
    mid-stop of its anchor gradient. Day-walk order:
-   sunrise → sunlight → sunset → twilight → moonlight → starlight. */
+   sunlight (white) → twilight → moonlight → starlight. */
 :root {
-  --background: #080a12;
-  --foreground: #cdd6e8;
-  --accent: #8fb6dd;
+  --background: #0b0e1a;
+  --foreground: #d3dbea;
+  --accent: #93b8dd;
 }
 
-[data-theme="sunrise"]  { --background: #fcd2b0; --foreground: #5a3a38; --accent: #e8794f; }
-[data-theme="sunlight"] { --background: #bfe4f7; --foreground: #1b2a3d; --accent: #f3a417; }
-[data-theme="sunset"]   { --background: #ffb778; --foreground: #43221a; --accent: #e0531f; }
-[data-theme="twilight"] { --background: #5b2f7a; --foreground: #f1e3d4; --accent: #f0894e; }
-[data-theme="moonlight"]{ --background: #080a12; --foreground: #cdd6e8; --accent: #8fb6dd; }
-[data-theme="starlight"]{ --background: #241a3a; --foreground: #f3e9ef; --accent: #cf9088; }
+[data-theme="sunlight"] { --background: #ffffff; --foreground: #111827; --accent: #b45309; }
+[data-theme="twilight"] { --background: #584671; --foreground: #efe4dc; --accent: #e2a07a; }
+[data-theme="moonlight"]{ --background: #0b0e1a; --foreground: #d3dbea; --accent: #93b8dd; }
+[data-theme="starlight"]{ --background: #1b1a33; --foreground: #eee9f3; --accent: #c9a6b8; }
+
+/* A slightly larger root size carries through every rem-based Tailwind size,
+   so the whole site steps up together instead of only the body copy. */
+html {
+  font-size: 106.25%; /* 17px */
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -32,6 +36,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.6;
   text-transform: lowercase;
   transition: color 0.3s ease;
 }
@@ -74,8 +79,8 @@ body {
   background: linear-gradient(
     115deg,
     transparent 14%,
-    rgba(120, 84, 148, 0.5) 45%,
-    rgba(120, 84, 148, 0.5) 52%,
+    rgba(121, 128, 190, 0.36) 45%,
+    rgba(121, 128, 190, 0.36) 52%,
     transparent 76%
   );
   animation: aurora-drift-1 15s ease-in-out infinite alternate;
@@ -85,8 +90,8 @@ body {
   background: linear-gradient(
     72deg,
     transparent 24%,
-    rgba(178, 102, 118, 0.42) 55%,
-    rgba(178, 102, 118, 0.42) 62%,
+    rgba(104, 156, 166, 0.3) 55%,
+    rgba(104, 156, 166, 0.3) 62%,
     transparent 86%
   );
   animation: aurora-drift-2 21s ease-in-out infinite alternate;
@@ -96,8 +101,8 @@ body {
   background: linear-gradient(
     158deg,
     transparent 28%,
-    rgba(196, 132, 110, 0.38) 60%,
-    rgba(196, 132, 110, 0.38) 66%,
+    rgba(168, 128, 158, 0.24) 60%,
+    rgba(168, 128, 158, 0.24) 66%,
     transparent 90%
   );
   animation: aurora-drift-3 27s ease-in-out infinite alternate;
@@ -135,41 +140,115 @@ body {
   border-radius: 9999px;
   background: #ffffff;
   opacity: var(--star-base, 0.5);
-  animation-name: star-twinkle;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
 }
-@keyframes star-twinkle {
-  0%, 100% { opacity: calc(var(--star-base, 0.5) * 0.25); }
-  50% { opacity: var(--star-base, 0.5); }
+/* the brighter handful get a soft halo so the field reads as a sky, not dust */
+.star-dot.star-bright {
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.75);
+}
+/* Stars stay static on purpose. Animating ~190 opacities made the browser
+   recalculate style for the whole document every frame; the field still reads
+   as a sky because the shooting stars are the only motion. */
+
+/* ---- shooting stars (whole-page, night only via .starfield opacity) ---- */
+.shooting-star {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: rotate(var(--angle, 20deg));
+}
+.shooting-star-streak {
+  display: block;
+  position: relative;
+  width: var(--len, 150px);
+  height: 2px;
+  border-radius: 9999px;
+  opacity: 0; /* hidden until its animation turn; prevents "stuck" pre-delay streaks */
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.35) 55%,
+    rgba(255, 255, 255, 0.9) 100%
+  );
+  /* box-shadow, not filter: a filter on a transform-animated layer is re-run
+     every frame; a shadow is baked into the layer. */
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+  animation: shooting-star-fly var(--dur, 14s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+.shooting-star-streak::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.55);
+}
+@keyframes shooting-star-fly {
+  0%   { opacity: 0; transform: translate3d(0, 0, 0); }
+  1%   { opacity: 1; }
+  6%   { opacity: 1; }
+  9%   { opacity: 0; transform: translate3d(var(--dist, 850px), 0, 0); }
+  100% { opacity: 0; transform: translate3d(var(--dist, 850px), 0, 0); }
 }
 
 /* ---- film grain to break up gradient banding ---- */
 .grain {
-  opacity: 0.045;
-  mix-blend-mode: overlay;
+  /* Normal blending, not `overlay`: a full-viewport blend layer under a
+     scrolling article makes the compositor redraw the grain against every
+     newly exposed tile. The texture is subtle enough that normal alpha reads
+     the same over a smooth gradient. */
+  opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 140px 140px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .star-dot { animation: none; }
+  .shooting-star-streak { animation: none; }
 }
 
 /* ---- hero constellation (components/Hero.tsx) ----
-   These used to be ~175 Framer Motion components, each running an infinite
-   JS-driven animation. They're pure CSS/SMIL now: the browser drives them and
-   the main thread stays free. Timings come in via --d / --delay. */
+   The constellation used to be ~175 Framer Motion components, each running an
+   infinite JS-driven animation. It's pure CSS/SMIL now: the browser drives it
+   and the main thread stays free. Timings come in via --d / --delay. The sky
+   itself (stars + shooting stars) lives in the page-wide Atmosphere layer, so
+   the constellation just floats on top of the same background. */
+.hero-star-cluster {
+  /* wide soft falloff so the extra density never reads as a box */
+  mask-image: radial-gradient(
+    70% 62% at 50% 46%,
+    #000 0%,
+    rgba(0, 0, 0, 0.85) 35%,
+    rgba(0, 0, 0, 0.35) 65%,
+    transparent 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    70% 62% at 50% 46%,
+    #000 0%,
+    rgba(0, 0, 0, 0.85) 35%,
+    rgba(0, 0, 0, 0.35) 65%,
+    transparent 100%
+  );
+}
+
 .hero-star {
   position: absolute;
   border-radius: 9999px;
   background: #ffffff;
+  /* fade the cluster back under daylight skies, full strength at night */
+  --hero-gate: calc(0.12 + 0.88 * var(--star-opacity, 1));
   animation: hero-star-twinkle var(--d, 3s) ease-in-out infinite;
   animation-delay: var(--delay, 0s);
 }
+.hero-star.hero-star-bright {
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.55);
+}
 @keyframes hero-star-twinkle {
-  0%, 100% { opacity: 0.2; transform: scale(1); }
-  50%      { opacity: 0.8; transform: scale(1.2); }
+  0%, 100% { opacity: calc(var(--hero-gate) * 0.25); transform: scale(1); }
+  50%      { opacity: calc(var(--hero-gate) * 0.9); transform: scale(1.2); }
 }
 
 .hero-node {
@@ -210,6 +289,13 @@ body {
   --sidenote-gap: 2rem;
 }
 
+/* wide display math scrolls inside its own line instead of widening the page */
+.blog-content .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
 .blog-content .sidenote-number {
   counter-increment: sidenote-counter;
   cursor: pointer;
@@ -231,9 +317,9 @@ body {
 
 .blog-content .sidenote,
 .blog-content .marginnote {
-  font-size: 0.8rem;
-  line-height: 1.5;
-  opacity: 0.72;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  opacity: 0.78;
 }
 
 /* first paragraph stays inline so it sits beside the note's number */
@@ -273,5 +359,55 @@ body {
     border-left: 2px solid var(--accent);
     background: color-mix(in srgb, var(--foreground) 4%, transparent);
     border-radius: 0 0.5rem 0.5rem 0;
+  }
+}
+
+
+/* ---- SVG whiteboard windows (components/SvgWindow.tsx) ---- */
+@font-face {
+  font-family: "Excalifont";
+  src: url("/fonts/Excalifont.ttf") format("truetype");
+  font-display: swap;
+}
+.svg-window .svg-window-canvas {
+  transform-origin: 50% 50%;
+  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* The site lowercases body copy; the board keeps its authored casing. */
+  text-transform: none;
+}
+.svg-window .svg-window-canvas.is-dragging {
+  transition: none;
+}
+.svg-window .svg-window-canvas > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+.svg-window:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #111;
+}
+.svg-window:fullscreen .svg-window-card {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  min-height: 0;
+}
+.svg-window:fullscreen .svg-window-card > div {
+  height: 100%;
+  aspect-ratio: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svg-window .svg-window-canvas {
+    transition: none;
   }
 }

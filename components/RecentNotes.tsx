@@ -65,12 +65,12 @@ export default async function RecentNotes() {
             <h2 className="text-xl font-bold flex items-center gap-2">
                 <span aria-hidden>🌱</span> i also keep a digital garden
             </h2>
-            <p className="mt-2 max-w-xl opacity-60 text-sm leading-relaxed">
+            <p className="mt-2 max-w-xl opacity-65 text-base leading-relaxed">
                 loose, evergreen notes on what i&apos;m learning. rougher and more
                 frequent than the posts above.
             </p>
 
-            <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
+            <div className="mt-5 flex flex-wrap items-center gap-2 text-base">
                 {notes.map((note) => (
                     <a
                         key={note.link}
@@ -88,7 +88,7 @@ export default async function RecentNotes() {
                 href={NOTES_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="group mt-6 inline-flex items-center gap-1 text-accent text-sm font-semibold hover:underline underline-offset-4"
+                className="group mt-6 inline-flex items-center gap-1 text-accent text-base font-semibold hover:underline underline-offset-4"
             >
                 explore notes
                 <span className="transition-transform group-hover:translate-x-0.5">→</span>

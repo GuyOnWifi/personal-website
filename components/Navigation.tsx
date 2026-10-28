@@ -13,7 +13,7 @@ const navItems = [
 
 export default function Navigation() {
     return (
-        <nav className="flex items-center justify-between py-8 w-full">
+        <nav className="flex items-center justify-between py-5 w-full">
             <Link href="/" className="font-bold text-3xl tracking-tight">
                 eason huang
             </Link>

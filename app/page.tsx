@@ -96,11 +96,11 @@ export default function Home() {
   ];
 
   return (
-    <div className="py-8 pb-16">
+    <div className="py-2 pb-12">
       <h1 className="sr-only">eason huang, software engineer</h1>
       <Hero />
 
-      <div className="mt-8">
+      <div className="mt-3">
         <ExperienceList sectionTitle="currently:" items={currentItems} />
 
         <ExperienceList sectionTitle="recently:" items={buildingItems} />

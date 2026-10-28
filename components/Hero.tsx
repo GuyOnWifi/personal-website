@@ -11,11 +11,11 @@ interface StarProps {
     delay: number;
 }
 
-// One composited CSS twinkle per star. The keyframes live in globals.css
+// One composited CSS twinkle per cluster star. The keyframes live in globals.css
 // (hero-star-twinkle) so the browser, not Framer Motion's JS loop, drives them.
 const Star: React.FC<StarProps> = ({ top, left, size, duration, delay }) => (
     <span
-        className="hero-star"
+        className={`hero-star${parseFloat(size) > 2.1 ? " hero-star-bright" : ""}`}
         style={
             {
                 top,
@@ -42,12 +42,12 @@ const ConstellationNode: React.FC<NodeProps> = ({ cx, cy, duration = 1.5, delay 
     <circle
         cx={cx}
         cy={cy}
-        r="4"
-        fill="white"
+        r="4.5"
+        fill="var(--accent)"
         className="hero-node"
         style={
             {
-                filter: "drop-shadow(0px 0px 4px rgba(255, 255, 255, 0.8))",
+                filter: "drop-shadow(0px 0px 5px var(--accent))",
                 "--d": `${duration}s`,
                 "--delay": `${delay}s`,
             } as React.CSSProperties
@@ -55,7 +55,7 @@ const ConstellationNode: React.FC<NodeProps> = ({ cx, cy, duration = 1.5, delay 
     >
         <animate
             attributeName="r"
-            values="3;5;3"
+            values="3.5;5.5;3.5"
             dur={`${duration}s`}
             begin={`${delay}s`}
             repeatCount="indefinite"
@@ -93,23 +93,26 @@ export default function Hero() {
     const [loneStar, setLoneStar] = useState<{ cx: number; cy: number; duration: number; delay: number } | null>(null);
 
     useEffect(() => {
-        // Generate random background stars
-        const generateStars = () => {
-            const newStars = [];
-            for (let i = 0; i < 150; i++) {
-                newStars.push({
-                    id: i,
-                    top: `${Math.random() * 100}%`,
-                    left: `${Math.random() * 100}%`,
-                    size: Math.random() * 2 + 1 + "px",
-                    duration: Math.random() * 3 + 2, // 2 to 5 seconds
-                    delay: Math.random() * 5,
-                });
-            }
-            setStars(newStars);
+        // Cluster, not a rectangle: Box-Muller positions gathered around the
+        // name, so density falls off naturally toward the edges. The CSS mask
+        // handles the long tail; there is no hard boundary anywhere.
+        const gauss = () => {
+            const u = 1 - Math.random();
+            const v = Math.random();
+            return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
         };
+        const clampPct = (n: number) => Math.min(98, Math.max(2, n));
 
-        generateStars();
+        setStars(
+            Array.from({ length: 120 }, (_, i) => ({
+                id: i,
+                top: `${clampPct(46 + gauss() * 21)}%`,
+                left: `${clampPct(50 + gauss() * 24)}%`,
+                size: Math.random() * 1.8 + 0.8 + "px",
+                duration: Math.random() * 3 + 2, // 2 to 5 seconds
+                delay: Math.random() * 5,
+            }))
+        );
 
         setTwinkles(
             NODE_COORDS.map(() => ({
@@ -152,14 +155,17 @@ export default function Hero() {
     const paths = [ePath, aPath, sPath, oPath, nPath];
 
     return (
-        <div className="relative h-[240px] w-full overflow-hidden rounded-2xl bg-foreground/[0.04] backdrop-blur-sm border border-foreground/10 box-content">
-            {/* Background Stars */}
-            {stars.map((star) => (
-                <Star key={star.id} {...star} />
-            ))}
+        <div className="relative h-[14rem] w-full overflow-hidden">
+            {/* Soft nebula of extra stars around the name. Radial mask means the
+                cluster dissolves into the page-wide starfield with no seam. */}
+            <div className="hero-star-cluster absolute inset-0">
+                {stars.map((star) => (
+                    <Star key={star.id} {...star} />
+                ))}
+            </div>
 
             {/* Constellation SVG Container */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-8">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
                 <svg
                     className="w-full h-full"
                     viewBox="0 0 1000 500"
@@ -173,8 +179,8 @@ export default function Hero() {
                                 d={d}
                                 pathLength={1}
                                 stroke="var(--accent)"
-                                strokeWidth="2"
-                                strokeOpacity="0.4"
+                                strokeWidth="2.2"
+                                strokeOpacity="0.55"
                                 fill="none"
                             />
                         ))}
@@ -195,13 +201,12 @@ export default function Hero() {
                         <circle
                             cx={loneStar.cx}
                             cy={loneStar.cy}
-                            r="7"
-                            fill="white"
+                            r="8"
+                            fill="var(--accent)"
                             className="hero-lone"
                             style={
                                 {
-                                    filter:
-                                        "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.9))",
+                                    filter: "drop-shadow(0px 0px 8px var(--accent))",
                                     "--d": `${loneStar.duration}s`,
                                     "--delay": `${loneStar.delay}s`,
                                 } as React.CSSProperties
@@ -209,7 +214,7 @@ export default function Hero() {
                         >
                             <animate
                                 attributeName="r"
-                                values="6;9;6"
+                                values="7;10;7"
                                 dur={`${loneStar.duration}s`}
                                 begin={`${loneStar.delay}s`}
                                 repeatCount="indefinite"

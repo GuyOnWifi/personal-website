@@ -40,16 +40,19 @@ In order to write good code, it's important to understand the hardware.
 Firstly, GPUs use SIMT (single instruction, multiple thread) as opposed to the CPU's SIMD (single instruction, multiple data). GPU kernels are written from the perspective of a thread.
 
 ![grid → CTA (thread block) → thread, and the indices for each.](/gpu_matmul/grid.webp)
-The GPU programming model defines **grids**, which are (up-to) 3D structures. Each element in a grid is a **block**, a simple (up to) 3D structure. Each element in a block is a **thread**. 
 
-![one SMSP: a warp scheduler feeding ld/fma/st, with its own register file.](/gpu_matmul/smsp.webp)
+The GPU programming model defines **grids**, which are (up-to) 3D structures. Each element in a grid is a **block**, a simple (up to) 3D structure. Each element in a block is a **thread**.
+
+<div data-svg-window="smsp" data-poster="/gpu_matmul/smsp.webp" data-aspect="1513 / 696" data-caption="one SMSP: a warp scheduler feeding ld/fma/st, with its own register file."></div>
 
 Hardware-wise, threads are grouped into sets of 32 called **warps**. The **warp scheduler** executes one instruction at a time (hence, SIMT)[^15]. The Streaming Multiprocessor Sub-Partition (SMSP) can choose to run different warps based on which one is stalled/ready (similar to how OS schedulers can schedule software threads). An important term to know is **occupancy**, meaning `# of warps resident / max warps`. Having more warps resident means more opportunities to latency-hide by switching to another ready warp.  
 
-![one SM: four SMSPs, each with a scheduler and register file, sharing SMEM.](/gpu_matmul/sm.webp)
+<div data-svg-window="sm" data-poster="/gpu_matmul/sm.webp" data-aspect="2988 / 1646" data-caption="one SM: four SMSPs, each with a scheduler and register file, sharing SMEM."></div>
+
 There are 4 of these SMSPs per SM. Each block is put onto an SM. All warps of the block become resident, and are ready to be executed on the warp schedulers. 
 
-![many SMs stitched together with global memory.](/gpu_matmul/gpu.webp)
+<div data-svg-window="gpu" data-poster="/gpu_matmul/gpu.webp" data-aspect="2000 / 1125" data-caption="many SMs stitched together with global memory."></div>
+
 And finally, the GPU is many SMs stitched together with a pool of global memory (VRAM) to form the GPU.
 
 On my 3060, there are 28 SMs, with 4 SMSPs each. There's 12GB of VRAM and 100KB of SMEM per SM. 
