@@ -13,6 +13,7 @@ import ebnf from "react-syntax-highlighter/dist/esm/languages/prism/ebnf";
 import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import nasm from "react-syntax-highlighter/dist/esm/languages/prism/nasm";
+import diff from "react-syntax-highlighter/dist/esm/languages/prism/diff";
 import { useTheme } from "./ThemeProvider";
 
 // Map the fence tags used in posts onto the registered grammars. Tags with no
@@ -22,6 +23,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
     js: "javascript",
     sh: "bash",
     asm: "nasm",
+    py: "python",
 };
 
 SyntaxHighlighter.registerLanguage("cpp", cpp);
@@ -31,6 +33,7 @@ SyntaxHighlighter.registerLanguage("ebnf", ebnf);
 SyntaxHighlighter.registerLanguage("bash", bash);
 SyntaxHighlighter.registerLanguage("json", json);
 SyntaxHighlighter.registerLanguage("nasm", nasm);
+SyntaxHighlighter.registerLanguage("diff", diff);
 
 interface CodeBlockProps {
     language: string;

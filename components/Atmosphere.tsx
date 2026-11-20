@@ -32,6 +32,7 @@ export default function Atmosphere() {
     // the paragraph you're on. Keep the shooting stars for the landing page;
     // the static starfield stays everywhere.
     const showShootingStars = !pathname?.startsWith("/blog");
+    const isBlog = !!pathname?.startsWith("/blog");
     const [stars, setStars] = useState<Dot[]>([]);
 
     useEffect(() => {
@@ -44,9 +45,15 @@ export default function Atmosphere() {
                 delay: Math.random() * 6,
                 dur: Math.random() * 3.5 + 2.5,
                 base: Math.random() * 0.45 + 0.5,
-            }))
+            })).filter((s) => {
+                // Thin out stars behind the reading column on blog pages;
+                // keep ~20% at the center, ramping to all of them by the edges.
+                if (!isBlog) return true;
+                const d = Math.abs(s.left - 50) / 30;
+                return d >= 1 || Math.random() < 0.2 + 0.8 * d * d;
+            })
         );
-    }, []);
+    }, [isBlog]);
 
     return (
         <>
