@@ -93,6 +93,14 @@ export default function Home() {
       link: "/blog/gpu_matmul",
       type: "job" as const,
     },
+    {
+      title: "Building an LLM Inference Engine",
+      company: "Writeup",
+      description:
+        "what it takes to actually serve model weights in production",
+      link: "/blog/llm_inference_engine",
+      type: "job" as const,
+    },
   ];
 
   return (

@@ -296,6 +296,11 @@ body {
   padding: 0.25rem 0;
 }
 
+/* The site lowercases body copy; math keeps its authored casing (V vs v). */
+.blog-content .katex {
+  text-transform: none;
+}
+
 .blog-content .sidenote-number {
   counter-increment: sidenote-counter;
   cursor: pointer;
