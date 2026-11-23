@@ -25,6 +25,8 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const wrap = (p: number) => ((p % 1) + 1) % 1;
+// Below this the aurora is imperceptible (moonlight sits at ~0.027).
+const AURORA_VISIBLE = 0.05;
 const easeInOut = (t: number) =>
     t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
@@ -36,6 +38,10 @@ function applyPhase(phase: number) {
     root.style.setProperty("--foreground", c.foreground);
     root.style.setProperty("--accent", c.accent);
     root.style.setProperty("--aurora-opacity", c.aurora.toFixed(3));
+    // Away from starlight the aurora sits at <~3% opacity, i.e. invisible, but
+    // its three drifting viewport-sized layers still cost a full composite
+    // pass each per frame (plus a main-thread style tick). Park it instead.
+    root.dataset.aurora = c.aurora > AURORA_VISIBLE ? "on" : "off";
     root.style.setProperty("--star-opacity", c.night.toFixed(3));
 
     const o = phaseToOrbs(phase);

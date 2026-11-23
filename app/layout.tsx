@@ -22,6 +22,9 @@ const geistMono = Geist_Mono({
 const dancingScript = Dancing_Script({
   variable: "--font-signature",
   subsets: ["latin"],
+  // Only the footer signature uses it (md+ screens, bottom of the page), so
+  // don't make every page preload its 43 kB ahead of the content.
+  preload: false,
 });
 
 const SITE_URL = "https://easonhuang.dev";
@@ -97,7 +100,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning data-theme="moonlight">
+    <html lang="en" suppressHydrationWarning data-theme="moonlight" data-aurora="off">
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -106,6 +109,17 @@ export default function RootLayout({
                 try {
                   const theme = localStorage.getItem('theme') || 'moonlight';
                   document.documentElement.setAttribute('data-theme', theme);
+                } catch (e) {}
+                // Low-power hint for the background effects (see globals.css).
+                // deviceMemory is Chromium-only; elsewhere this stays off.
+                try {
+                  var n = navigator;
+                  var c = n.connection;
+                  if ((n.deviceMemory && n.deviceMemory <= 4) ||
+                      (n.hardwareConcurrency && n.hardwareConcurrency <= 2) ||
+                      (c && c.saveData)) {
+                    document.documentElement.setAttribute('data-lowpower', '');
+                  }
                 } catch (e) {}
               })();
             `,

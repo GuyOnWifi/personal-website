@@ -9,6 +9,8 @@ interface BlogImageProps {
     alt?: string;
     width?: number;
     height?: number;
+    /** Show the alt text as a caption under the image (default true). */
+    caption?: boolean;
 }
 
 const MIN_SCALE = 1;
@@ -22,7 +24,7 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
  * lightbox with wheel/pinch zoom and drag-to-pan, which keeps the source image
  * at its native resolution instead of baking in a crop.
  */
-export default function BlogImage({ src, alt, width, height }: BlogImageProps) {
+export default function BlogImage({ src, alt, width, height, caption = true }: BlogImageProps) {
     const [open, setOpen] = useState(false);
 
     if (!src) return null;
@@ -56,7 +58,7 @@ export default function BlogImage({ src, alt, width, height }: BlogImageProps) {
                     expand
                 </span>
             </span>
-            {alt && <span className="block text-center text-[0.95rem] opacity-55 mt-4 italic break-words">{alt}</span>}
+            {caption && alt && <span className="block text-center text-[0.95rem] opacity-55 mt-4 italic break-words">{alt}</span>}
             {open &&
                 createPortal(
                     <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} />,
@@ -66,7 +68,7 @@ export default function BlogImage({ src, alt, width, height }: BlogImageProps) {
     );
 }
 
-function ImageLightbox({ src, alt, onClose }: { src: string; alt?: string; onClose: () => void }) {
+export function ImageLightbox({ src, alt, onClose }: { src: string; alt?: string; onClose: () => void }) {
     const stageRef = useRef<HTMLDivElement>(null);
     const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface StarProps {
     id?: number;
@@ -129,6 +129,30 @@ export default function Hero() {
         });
     }, []);
 
+    // Pause everything once the hero scrolls out of view, and keep the SMIL
+    // radius pulses still on low-power devices / reduced motion (the CSS side
+    // of both lives in globals.css). SMIL repaints the SVG, and its 26
+    // drop-shadow filters, on the main thread every frame.
+    const rootRef = useRef<HTMLDivElement>(null);
+    const svgRef = useRef<SVGSVGElement>(null);
+    useEffect(() => {
+        const root = rootRef.current;
+        const svg = svgRef.current;
+        if (!root || !svg) return;
+        const still =
+            document.documentElement.hasAttribute("data-lowpower") ||
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (still) svg.pauseAnimations();
+        const io = new IntersectionObserver(([entry]) => {
+            root.classList.toggle("hero-paused", !entry.isIntersecting);
+            if (still) return;
+            if (entry.isIntersecting) svg.unpauseAnimations();
+            else svg.pauseAnimations();
+        });
+        io.observe(root);
+        return () => io.disconnect();
+    }, []);
+
     // ViewBox coordinates for the constellation. (0,0) to (1000, 500)
     // Scaling it roughly to match the screen's aspect ratio and center it.
 
@@ -155,7 +179,7 @@ export default function Hero() {
     const paths = [ePath, aPath, sPath, oPath, nPath];
 
     return (
-        <div className="relative h-[14rem] w-full overflow-hidden">
+        <div ref={rootRef} className="relative h-[14rem] w-full overflow-hidden">
             {/* Soft nebula of extra stars around the name. Radial mask means the
                 cluster dissolves into the page-wide starfield with no seam. */}
             <div className="hero-star-cluster absolute inset-0">
@@ -167,6 +191,7 @@ export default function Hero() {
             {/* Constellation SVG Container */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
                 <svg
+                    ref={svgRef}
                     className="w-full h-full"
                     viewBox="0 0 1000 500"
                     preserveAspectRatio="xMidYMid meet"

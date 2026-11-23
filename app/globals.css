@@ -59,6 +59,18 @@ body {
   transition: opacity 1.2s ease;
 }
 
+/* Parked (ThemeProvider sets data-aurora="off" whenever the aurora is
+   effectively invisible, and the root starts that way). Hidden layers drop out
+   of compositing, and pausing stops the per-frame animation tick. The
+   visibility flip waits out the opacity fade so nothing pops. */
+:root[data-aurora="off"] .aurora-layer {
+  visibility: hidden;
+  transition: opacity 1.2s ease, visibility 0s linear 1.2s;
+}
+:root[data-aurora="off"] .aurora-band {
+  animation-play-state: paused;
+}
+
 .aurora-band {
   position: absolute;
   inset: -45% -25%;
@@ -126,8 +138,16 @@ body {
   to   { transform: translate3d(6%, -7%, 0); }
 }
 
+/* Static aurora for reduced motion and low-power devices (data-lowpower is set
+   by the inline script in app/layout.tsx). Without the drift and will-change
+   the bands flatten into one painted layer: same look, frozen, and scrolling
+   stops paying for three extra full-screen composites per frame. */
 @media (prefers-reduced-motion: reduce) {
-  .aurora-band { animation: none; }
+  .aurora-band { animation: none; will-change: auto; }
+}
+:root[data-lowpower] .aurora-band {
+  animation: none;
+  will-change: auto;
 }
 
 /* ---- night starfield (whole-page), gated by --star-opacity ---- */
@@ -234,21 +254,48 @@ body {
   );
 }
 
+/* Two things keep the 120 twinkles on the compositor:
+   - The daylight gate lives on the cluster, not in the keyframes. A var() in
+     keyframe values can't be composited, so every star used to be re-styled
+     on the main thread every frame. (Parent opacity x child opacity is the
+     same product the keyframes used to compute.)
+   - Each animation iteration fires an `animationiteration` event, and React
+     listens for those at the document root, so Chrome has to service them on
+     the main thread. 120 stars on 2-5s loops meant one nearly every frame.
+     The keyframes below are 8 identical twinkles per iteration (duration x8),
+     so the motion is unchanged and the events drop 8x. */
+.hero-star-cluster {
+  /* fade the cluster back under daylight skies, full strength at night */
+  opacity: calc(0.12 + 0.88 * var(--star-opacity, 1));
+}
 .hero-star {
   position: absolute;
   border-radius: 9999px;
   background: #ffffff;
-  /* fade the cluster back under daylight skies, full strength at night */
-  --hero-gate: calc(0.12 + 0.88 * var(--star-opacity, 1));
-  animation: hero-star-twinkle var(--d, 3s) ease-in-out infinite;
+  animation: hero-star-twinkle calc(var(--d, 3s) * 8) ease-in-out infinite;
   animation-delay: var(--delay, 0s);
 }
 .hero-star.hero-star-bright {
   box-shadow: 0 0 5px rgba(255, 255, 255, 0.55);
 }
 @keyframes hero-star-twinkle {
-  0%, 100% { opacity: calc(var(--hero-gate) * 0.25); transform: scale(1); }
-  50%      { opacity: calc(var(--hero-gate) * 0.9); transform: scale(1.2); }
+  0%      { opacity: 0.25; transform: scale(1); }
+  6.25%   { opacity: 0.9; transform: scale(1.2); }
+  12.5%   { opacity: 0.25; transform: scale(1); }
+  18.75%  { opacity: 0.9; transform: scale(1.2); }
+  25%     { opacity: 0.25; transform: scale(1); }
+  31.25%  { opacity: 0.9; transform: scale(1.2); }
+  37.5%   { opacity: 0.25; transform: scale(1); }
+  43.75%  { opacity: 0.9; transform: scale(1.2); }
+  50%     { opacity: 0.25; transform: scale(1); }
+  56.25%  { opacity: 0.9; transform: scale(1.2); }
+  62.5%   { opacity: 0.25; transform: scale(1); }
+  68.75%  { opacity: 0.9; transform: scale(1.2); }
+  75%     { opacity: 0.25; transform: scale(1); }
+  81.25%  { opacity: 0.9; transform: scale(1.2); }
+  87.5%   { opacity: 0.25; transform: scale(1); }
+  93.75%  { opacity: 0.9; transform: scale(1.2); }
+  100%    { opacity: 0.25; transform: scale(1); }
 }
 
 .hero-node {
@@ -267,6 +314,27 @@ body {
 @keyframes hero-lone-fade {
   0%, 100% { opacity: 0.4; }
   50%      { opacity: 1; }
+}
+
+/* Paused while the hero is offscreen (Hero.tsx toggles .hero-paused; the SMIL
+   radius pulses are paused there too). Low-power devices and reduced motion
+   keep the constellation nodes still: their SVG opacity/radius pulses (with a
+   drop-shadow each) repaint on the main thread every frame. */
+.hero-paused .hero-star,
+.hero-paused .hero-node,
+.hero-paused .hero-lone {
+  animation-play-state: paused;
+}
+:root[data-lowpower] .hero-node,
+:root[data-lowpower] .hero-lone {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-star,
+  .hero-node,
+  .hero-lone {
+    animation: none;
+  }
 }
 
 /* one-shot self-drawing letter paths; pathLength=1 normalises the dash */

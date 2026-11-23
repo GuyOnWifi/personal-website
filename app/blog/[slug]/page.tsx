@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
@@ -11,6 +11,8 @@ import CodeBlock from "@/components/CodeBlock";
 import BlogVideo from "@/components/BlogVideo";
 import BlogImage from "@/components/BlogImage";
 import SvgWindow from "@/components/SvgWindow";
+import ChartGallery from "@/components/ChartGallery";
+import ChartPeek from "@/components/ChartPeek";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -39,6 +41,30 @@ function loadImageSizes(): Record<string, { w: number; h: number }> {
     }
 }
 const imageSizes = loadImageSizes();
+
+/**
+ * react-markdown hands every component override its hast `node`. The overrides
+ * below spread their props onto host elements, which renders
+ * node="[object Object]" on every tag and, worse, serialises each element's
+ * whole hast subtree into the RSC payload (quadratic in nesting depth: the
+ * KaTeX blocks alone were most of a ~1 MB payload). Strip it once here.
+ */
+function withoutNode(components: Components): Components {
+    const out: Record<string, unknown> = {};
+    for (const [tag, Comp] of Object.entries(components)) {
+        if (typeof Comp !== "function") {
+            out[tag] = Comp;
+            continue;
+        }
+        const render = Comp as (props: Record<string, unknown>) => React.ReactNode;
+        out[tag] = (props: Record<string, unknown>) => {
+            const { node, ...rest } = props;
+            void node;
+            return render(rest);
+        };
+    }
+    return out as Components;
+}
 
 interface PostMeta {
     title?: string;
@@ -182,7 +208,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                 <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeRaw, rehypeSidenotes, rehypeKatex]}
-                    components={{
+                    components={withoutNode({
                         h1: ({ ...props }) => <h1 className="text-3xl font-bold text-foreground mt-12 mb-6" {...props} />,
                         h2: ({ ...props }) => <h2 className="text-2xl font-bold text-foreground mt-10 mb-4" {...props} />,
                         h3: ({ ...props }) => <h3 className="text-xl font-bold text-foreground mt-8 mb-4" {...props} />,
@@ -227,7 +253,9 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         blockquote: ({ ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
                             <blockquote className="border-l-4 border-accent pl-6 py-2 italic opacity-80 my-8 bg-foreground/[0.02] rounded-r-lg" {...props} />
                         ),
-                        img: ({ ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
+                        img: ({ ...props }: React.ImgHTMLAttributes<HTMLImageElement> & {
+                            "data-no-caption"?: string;
+                        }) => {
                             // Intrinsic size, when we know it, lets the browser
                             // reserve the right box before the image arrives --
                             // otherwise a 25-figure post reflows 25 times.
@@ -241,6 +269,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                     alt={props.alt}
                                     width={width}
                                     height={height}
+                                    caption={props["data-no-caption"] === undefined}
                                 />
                             );
                         },
@@ -253,11 +282,15 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                             "data-caption"?: string;
                             "data-poster"?: string;
                             "data-aspect"?: string;
+                            "data-chart-gallery"?: string;
                             src?: string;
                             poster?: string;
                         }) => {
                             if (props["data-blog-video"] !== undefined) {
                                 return <BlogVideo src={props.src} poster={props.poster} />;
+                            }
+                            if (props["data-chart-gallery"] !== undefined) {
+                                return <ChartGallery>{props.children}</ChartGallery>;
                             }
                             const board = props["data-svg-window"];
                             if (board) {
@@ -272,11 +305,20 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                             }
                             return <div {...props} />;
                         },
+                        // Chart icon in a table header: <span data-chart="src" data-alt="title"></span>
+                        span: ({ ...props }: React.HTMLAttributes<HTMLSpanElement> & {
+                            "data-chart"?: string;
+                            "data-alt"?: string;
+                        }) => {
+                            const chart = props["data-chart"];
+                            if (chart) return <ChartPeek src={chart} alt={props["data-alt"]} />;
+                            return <span {...props} />;
+                        },
                         video: ({ src, poster }: React.VideoHTMLAttributes<HTMLVideoElement>) => (
                             <BlogVideo src={typeof src === "string" ? src : undefined} poster={poster} />
                         ),
                         a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a className="text-accent hover:underline transition-colors break-words" {...props} />,
-                    }}
+                    })}
                 >
                     {renderedContent}
                 </ReactMarkdown>
