@@ -15,6 +15,7 @@ We'll iteratively write the code and work through the following optimizations
 7) Prefix Caching
 8) CUDA Graphs
 9) Overlap Scheduling
+10) torch.compile
 
 ## Results & Benchmarking
 
@@ -97,14 +98,14 @@ We always do a warmup before benchmarking, for all of the JIT code to compile, k
 \*Prefix cache hits: the bench reruns the same prompts.
 
 
-All code is on [Github](https://github.com/GuyOnWifi/scheduler)
+All code is on [GitHub](https://github.com/GuyOnWifi/scheduler)
 ## Summary of Qwen
 
 ![Qwen3 architecture: 28 stacked decoder layers](/llm_inference_engine/scheduler-01.webp)
 
 Hopefully this summarizes the Qwen architecture well enough! It is very similar to the original [attention paper](https://arxiv.org/abs/1706.03762) with the following changes:
-- [Rope](https://arxiv.org/abs/2104.09864) ([good resource](https://huggingface.co/blog/designing-positional-encoding))
-- [Group Query Attention](https://arxiv.org/abs/2305.13245) 
+- [RoPE](https://arxiv.org/abs/2104.09864) ([good resource](https://huggingface.co/blog/designing-positional-encoding))
+- [Grouped-Query Attention](https://arxiv.org/abs/2305.13245) 
 - RMSNorm
 
 You can check out the basic impl of qwen at commit [0d4e790](https://github.com/GuyOnWifi/scheduler/commit/0d4e790ca9f59124dbc72e253203135cddd76b68)
@@ -112,7 +113,7 @@ You can check out the basic impl of qwen at commit [0d4e790](https://github.com/
 We will wrap our model with the following entry point:
 ```python 
 def forward(self, input_ids: torch.Tensor, meta: BatchMeta, kv_cache) -> torch.Tensor:
-	pass
+    pass
 ```
 
 where input_ids is the token ids, and `BatchMeta` stores information about our current batch.
@@ -120,7 +121,7 @@ where input_ids is the token ids, and `BatchMeta` stores information about our c
 ```python 
 @dataclass
 class BatchMeta:
-	pass
+    pass
 ```
 
 Our scheduler will have the following contract:
@@ -167,10 +168,10 @@ So with KV caching, we can split up our engine into two phases: prefill (prompt 
 
 We add positions to the BatchMeta
 ```diff
-@dataclass
-class BatchMeta:
-	lengths: torch.Tensor
-+	positions: torch.Tensor
+ @dataclass
+ class BatchMeta:
+     lengths: torch.Tensor
++    positions: torch.Tensor
 ```
 
 We store our KV cache as one big PyTorch tensor:
@@ -200,32 +201,32 @@ We store our KV cache as one big PyTorch tensor:
 
 And within the attention mechanism, we write to the KV cache as well as perform attention on it. 
 ```diff
--        v_expanded = torch.repeat_interleave(v_head, self.groups, dim=1)
--        k_expanded = torch.repeat_interleave(k_rope, self.groups, dim=1)
-+        (k_cache, v_cache) = kv_cache
-+        rows = torch.arange(nb, device=x.device)[:, None]  # [B, 1]
-+        k_cache[rows, :, positions] = k_rope.transpose(
-+            1, 2
-+        )  # [B, T, kv_heads, head_dim]
-+        v_cache[rows, :, positions] = v_head.transpose(
-+            1, 2
-+        )  # [B, T, kv_heads, head_dim]
+-v_expanded = torch.repeat_interleave(v_head, self.groups, dim=1)
+-k_expanded = torch.repeat_interleave(k_rope, self.groups, dim=1)
++(k_cache, v_cache) = kv_cache
++rows = torch.arange(nb, device=x.device)[:, None]  # [B, 1]
++k_cache[rows, :, positions] = k_rope.transpose(
++    1, 2
++)  # [B, T, kv_heads, head_dim]
++v_cache[rows, :, positions] = v_head.transpose(
++    1, 2
++)  # [B, T, kv_heads, head_dim]
 +
-+        # mask is (num_batch, num_toks, max_toks), True = blocked: causal by position
-+        max_toks = int(positions.max()) + 1
-+        mask = torch.arange(max_toks, device=x.device) > positions[:, :, None]
-+        k_all = k_cache[:, :, :max_toks, :]  # (nb, kvh, max_toks, hd)
-+        v_all = v_cache[:, :, :max_toks, :]
++# mask is (num_batch, num_toks, max_toks), True = blocked: causal by position
++max_toks = int(positions.max()) + 1
++mask = torch.arange(max_toks, device=x.device) > positions[:, :, None]
++k_all = k_cache[:, :, :max_toks, :]  # (nb, kvh, max_toks, hd)
++v_all = v_cache[:, :, :max_toks, :]
 +
-+        v_expanded = torch.repeat_interleave(v_all, self.groups, dim=1)
-+        k_expanded = torch.repeat_interleave(k_all, self.groups, dim=1)
- 
-         att = q_rope @ k_expanded.transpose(2, 3)
--        att_masked = att.masked_fill(mask, -torch.inf)
-+        att_masked = att.masked_fill(mask[:, None], -torch.inf)  # mask over all heads
-         att_weights = torch.softmax(
-             att_masked / self.head_dim**0.5, dim=-1, dtype=torch.float32
-         ).to(x.dtype)
++v_expanded = torch.repeat_interleave(v_all, self.groups, dim=1)
++k_expanded = torch.repeat_interleave(k_all, self.groups, dim=1)
+
+ att = q_rope @ k_expanded.transpose(2, 3)
+-att_masked = att.masked_fill(mask, -torch.inf)
++att_masked = att.masked_fill(mask[:, None], -torch.inf)  # mask over all heads
+ att_weights = torch.softmax(
+     att_masked / self.head_dim**0.5, dim=-1, dtype=torch.float32
+ ).to(x.dtype)
 ```
 
 This decreases each decode step from 83.6ms -> 11.2ms (7.5x!) 
@@ -252,47 +253,47 @@ In our code, this means that we'll need to give each request a "slot" to store i
 
 We'll store the free_kv slots in each one 
 ```diff
-     def __init__(self, model: Model, n_batch=8, max_len=2048):
-         self.n_batch = n_batch
-         self.max_len = max_len
-         self.model = model
--        self.waiting_queue: list[Request] = []
-+        self.waiting_queue: deque[Request] = deque()
-         self.running: list[RunningReq] = []
-+        self.free_kv_slots = [i for i in range(n_batch)]
-         self.cache = model.alloc_cache(n_batch, max_len)
-         self.prefill = False
+ def __init__(self, model: Model, n_batch=8, max_len=2048):
+     self.n_batch = n_batch
+     self.max_len = max_len
+     self.model = model
+-    self.waiting_queue: list[Request] = []
++    self.waiting_queue: deque[Request] = deque()
+     self.running: list[RunningReq] = []
++    self.free_kv_slots = [i for i in range(n_batch)]
+     self.cache = model.alloc_cache(n_batch, max_len)
+     self.prefill = False
 ```
 
 On admission, we give it a free KV slot and mark it to prefill
 ```python
-        while self.waiting_queue and len(self.running) < self.n_batch:
-            r = self.waiting_queue.popleft()
-            new = RunningReq(
-                r.req_id,
-                list(r.prompt_ids),
-                r.max_tokens,
-                self.model.eos_token_ids,
-                self.free_kv_slots.pop(),
-            )
-            to_prefill.append(new)
-            self.running.append(new)
+while self.waiting_queue and len(self.running) < self.n_batch:
+    r = self.waiting_queue.popleft()
+    new = RunningReq(
+        r.req_id,
+        list(r.prompt_ids),
+        r.max_tokens,
+        self.model.eos_token_ids,
+        self.free_kv_slots.pop(),
+    )
+    to_prefill.append(new)
+    self.running.append(new)
 ```
 
 After processing the tokens:
 ```diff
--        for req, t in zip(self.running, next_toks):
--            if req.done:
--                continue  # finished rows still ride along in the batch, but stay silent
-+        for req, t in next_toks:
-             req.toks.append(t)
-             req.generated += 1
+-for req, t in zip(self.running, next_toks):
+-    if req.done:
+-        continue  # finished rows still ride along in the batch, but stay silent
++for req, t in next_toks:
+     req.toks.append(t)
+     req.generated += 1
 +
-+            if req.done:
-+                self.free_kv_slots.append(req.slot)
-             toks.append(TokenEvent(req.req_id, t, req.done))
- 
-+        self.running = [r for r in self.running if not r.done]
++    if req.done:
++        self.free_kv_slots.append(req.slot)
+     toks.append(TokenEvent(req.req_id, t, req.done))
+
++self.running = [r for r in self.running if not r.done]
 ```
 
 Since we're no longer blocking waiting for our entire batch, we see insane improvements in TTFT p50 (2241 -> 57ms, 39x!). We see similar gains in E2E p50 (3740 -> 1622 ms) and max TPS (150 -> 224). TPOT remains unchanged since we only really change how we schedule, not the engine steps itself. 
@@ -327,12 +328,12 @@ Since our requests now might not be fully prefilled, we need a way to store how 
 
 We add a core loop to check for the "budget":
 ```diff
-+        while prefill_list and budget > 0:
-+            req = prefill_list.popleft()
-+            wants = len(req.toks) - req.num_computed
-+            b = min(budget, wants)
-+            to_prefill.append((req, b))
-+            budget -= b
++while prefill_list and budget > 0:
++    req = prefill_list.popleft()
++    wants = len(req.toks) - req.num_computed
++    b = min(budget, wants)
++    to_prefill.append((req, b))
++    budget -= b
 ```
 
 And with this, our ITL p99 goes from 75.9 -> 65.7. It does come at the cost of slightly higher TTFT (57 -> 75.1ms) since we don't prefill the entire thing immediately. 
@@ -341,7 +342,7 @@ Code: [rung-04-chunked](https://github.com/GuyOnWifi/scheduler/tree/rung-04-chun
 
 ## Flash Attention 
 
-Currently, our attention is materializing a $n \times n$ matrix. This is bad for 2 reasons:
+Currently, our attention is materializing an $n \times n$ matrix. This is bad for 2 reasons:
 1) Moving that huge matrix in and out of HBM is slow, which is necessary when the GPU needs to perform ops like softmax
 2) Uses O(n^2) space 
 
@@ -395,32 +396,32 @@ It is a bit of work rewriting everything to use ragged pointers however... you c
 --- 
 
 ```diff
-+        indptr = torch.nn.functional.pad(meta.lengths.cumsum(0), (1, 0)).int()
-+        paged_kv_indptr = torch.arange(len(meta.slot_ids) + 1).int()
-+        paged_kv_indices = meta.slot_ids.int()
-+        last_page_lens = (meta.positions[:, 0] + meta.lengths).int()
-+        self.prefill_wrapper.plan(
-+            indptr,
-+            paged_kv_indptr,
-+            paged_kv_indices,
-+            last_page_lens,
-+            self.cfg.num_attention_heads,
-+            self.cfg.num_key_value_heads,
-+            self.cfg.head_dim,
-+            kv_cache.k.shape[3],
-+            causal=True,
-+            q_data_type=self.embed_tokens.weight.dtype,
-+        )
++indptr = torch.nn.functional.pad(meta.lengths.cumsum(0), (1, 0)).int()
++paged_kv_indptr = torch.arange(len(meta.slot_ids) + 1).int()
++paged_kv_indices = meta.slot_ids.int()
++last_page_lens = (meta.positions[:, 0] + meta.lengths).int()
++self.prefill_wrapper.plan(
++    indptr,
++    paged_kv_indptr,
++    paged_kv_indices,
++    last_page_lens,
++    self.cfg.num_attention_heads,
++    self.cfg.num_key_value_heads,
++    self.cfg.head_dim,
++    kv_cache.k.shape[3],
++    causal=True,
++    q_data_type=self.embed_tokens.weight.dtype,
++)
 ```
 
 FlashInfer requires us to call plan() first with the indptr (the pointer part of the input_ids ragged tensor), as well as a ragged tensor of where the paged_kv lives. For now, each slot is just one giant page of size `max_len`; we'll make real pages later. 
 
 ```diff
-+        rows = meta.slot_ids.repeat_interleave(meta.lengths)
-+        k_cache[rows, :, positions] = k_rope
-+        v_cache[rows, :, positions] = v_head
++rows = meta.slot_ids.repeat_interleave(meta.lengths)
++k_cache[rows, :, positions] = k_rope
++v_cache[rows, :, positions] = v_head
 +
-+        out = prefill_wrapper.run(q_rope, (k_cache, v_cache))  # (N, qh, hd)
++out = prefill_wrapper.run(q_rope, (k_cache, v_cache))  # (N, qh, hd)
 ```
 
 But now, we handle the store into KV cache, and we just call FlashInfer's kernel on it and we're done! 
@@ -458,9 +459,9 @@ We change the shape of our KV cache:
 
 Now that we have more complex paging mechanism, the engine needs to be the one calculating much of the attention metadata:
 ```diff
-@dataclass 
-class BatchMeta:
-	lengths: torch.Tensor
+ @dataclass
+ class BatchMeta:
+     lengths: torch.Tensor
 -    slot_ids: torch.Tensor
 +    paged_kv_indptr: torch.Tensor
 +    paged_kv_indices: torch.Tensor
@@ -477,60 +478,60 @@ The logic for this is a lot more fun now that we need to handle
 3) Preempting if not enough space
 
 ```python
-        # 1) admission: only admit if the prompt's pages fit
-        while self.waiting_queue:
-            r = self.waiting_queue[0]
-            num_pages_needed = ceil((len(r.prompt_ids)) / self.page_size)
-            # keep one free page per running request, so each can cross its next
-            # page boundary before anyone needs preempting
-            reserve = len(self.running)
-            if num_pages_needed + reserve <= len(self.free_kv_slots):
-                new = RunningReq(
-                    r.req_id,
-                    list(r.prompt_ids),
-                    r.max_tokens,
-                    self.model.eos_token_ids,
-                    [self.free_kv_slots.popleft() for _ in range(num_pages_needed)],
-                )
-                self.running.append(new)
-                self.waiting_queue.popleft()
-            else:
-                break
+# 1) admission: only admit if the prompt's pages fit
+while self.waiting_queue:
+    r = self.waiting_queue[0]
+    num_pages_needed = ceil((len(r.prompt_ids)) / self.page_size)
+    # keep one free page per running request, so each can cross its next
+    # page boundary before anyone needs preempting
+    reserve = len(self.running)
+    if num_pages_needed + reserve <= len(self.free_kv_slots):
+        new = RunningReq(
+            r.req_id,
+            list(r.prompt_ids),
+            r.max_tokens,
+            self.model.eos_token_ids,
+            [self.free_kv_slots.popleft() for _ in range(num_pages_needed)],
+        )
+        self.running.append(new)
+        self.waiting_queue.popleft()
+    else:
+        break
 ```
 
 ```python
-                # 2) completion: give the pages back
-                if req.done:
-                    self.free_kv_slots.extend(req.pages_idx)
+# 2) completion: give the pages back
+if req.done:
+    self.free_kv_slots.extend(req.pages_idx)
 ```
 
 ```python
-            # 3) a decode crossing into a new page, with no free page left: preempt
-            if len(r.toks) > self.page_size * len(r.pages_idx):
-                if self.free_kv_slots:
-                    r.pages_idx.append(self.free_kv_slots.popleft())
-                else:
-                    # find the last
-                    idx = -1
-                    while self.running[idx].req_id in preempted:
-                        idx -= 1
-                    to_preempt = self.running[idx]
+# 3) a decode crossing into a new page, with no free page left: preempt
+if len(r.toks) > self.page_size * len(r.pages_idx):
+    if self.free_kv_slots:
+        r.pages_idx.append(self.free_kv_slots.popleft())
+    else:
+        # find the last
+        idx = -1
+        while self.running[idx].req_id in preempted:
+            idx -= 1
+        to_preempt = self.running[idx]
 
-                    self.free_kv_slots.extend(to_preempt.pages_idx)
-                    self.waiting_queue.appendleft(
-                        Request(
-                            to_preempt.req_id,
-                            to_preempt.toks,
-                            to_preempt.max_tokens - to_preempt.generated,
-                            -1,
-                        )
-                    )
-                    preempted.add(to_preempt.req_id)
-                    if to_preempt.req_id == r.req_id:
-                        # self preemption
-                        break
-                    else:
-                        r.pages_idx.append(self.free_kv_slots.popleft())
+        self.free_kv_slots.extend(to_preempt.pages_idx)
+        self.waiting_queue.appendleft(
+            Request(
+                to_preempt.req_id,
+                to_preempt.toks,
+                to_preempt.max_tokens - to_preempt.generated,
+                -1,
+            )
+        )
+        preempted.add(to_preempt.req_id)
+        if to_preempt.req_id == r.req_id:
+            # self preemption
+            break
+        else:
+            r.pages_idx.append(self.free_kv_slots.popleft())
 ```
 
 There's almost no change in any metrics, except for max TPS since we can have more concurrent requests. It goes from 577 -> 1315 tok/s
@@ -572,81 +573,81 @@ We use ref-counting because many requests might be sharing a block. One thing to
 
 We'll store a way to lookup blocks by dict:
 ```diff
-+        self.hash_to_blocks = {}
++self.hash_to_blocks = {}
 ```
 
 ```python
-                # (after the forward, for each page that just filled up)
-                # hash the blocks
-                for i in range(
-                    req.num_computed // self.page_size,
-                    (req.num_computed + b) // self.page_size,
-                ):
-                    # starting block
-                    prev_hash = None
-                    if i > 0:
-                        prev_hash = req.pages[i - 1].hash
+# (after the forward, for each page that just filled up)
+# hash the blocks
+for i in range(
+    req.num_computed // self.page_size,
+    (req.num_computed + b) // self.page_size,
+):
+    # starting block
+    prev_hash = None
+    if i > 0:
+        prev_hash = req.pages[i - 1].hash
 
-                    h = hash(
-                        (
-                            prev_hash,
-                            tuple(
-                                req.toks[i * self.page_size : (i + 1) * self.page_size]
-                            ),
-                        )
-                    )
-                    req.pages[i].hash = h
+    h = hash(
+        (
+            prev_hash,
+            tuple(
+                req.toks[i * self.page_size : (i + 1) * self.page_size]
+            ),
+        )
+    )
+    req.pages[i].hash = h
 
-                    # keep the first block registered for h; a later duplicate stays private
-                    self.hash_to_blocks.setdefault(h, req.pages[i])
+    # keep the first block registered for h; a later duplicate stays private
+    self.hash_to_blocks.setdefault(h, req.pages[i])
 ```
 
 We'll change the free queue to handle O(1) deletions from anywhere, which is possible now when a match is found
 ```diff
--        self.free_kv_slots = deque(range(num_pages))
-+        self.free_kv_slots = OrderedDict(
-+            {i: Block(None, i, 0) for i in range(num_pages)}
-+        )
+-self.free_kv_slots = deque(range(num_pages))
++self.free_kv_slots = OrderedDict(
++    {i: Block(None, i, 0) for i in range(num_pages)}
++)
 ```
 
 On admission, we hash the sequence and greedily find the longest prefix match, using those blocks and increasing their refcount by 1, with a special case if that takes a block out of the free queue. 
 ```python
-                # greedy match
-                prev_hash = None
-                for i in range((len(r.prompt_ids) - 1) // self.page_size):
-                    t = r.prompt_ids[i * self.page_size : (i + 1) * self.page_size]
-                    h = hash((prev_hash, tuple(t)))
-                    prev_hash = h
-                    if h in self.hash_to_blocks:
-                        b = self.hash_to_blocks[h]
-                        pages.append(b)
-                        if b.ref_count == 0:
-                            del self.free_kv_slots[b.block_idx]
-                        num_pages_needed -= 1
-                        num_computed += self.page_size
-                        b.ref_count += 1
+# greedy match
+prev_hash = None
+for i in range((len(r.prompt_ids) - 1) // self.page_size):
+    t = r.prompt_ids[i * self.page_size : (i + 1) * self.page_size]
+    h = hash((prev_hash, tuple(t)))
+    prev_hash = h
+    if h in self.hash_to_blocks:
+        b = self.hash_to_blocks[h]
+        pages.append(b)
+        if b.ref_count == 0:
+            del self.free_kv_slots[b.block_idx]
+        num_pages_needed -= 1
+        num_computed += self.page_size
+        b.ref_count += 1
 
-                    else:
-                        break
+    else:
+        break
 
-                for _ in range(num_pages_needed):
-                    _, blk = self.free_kv_slots.popitem(last=False)
-                    # only drop the map entry if it points to this block (a duplicate copy
-                    # of the same prefix shares the hash but isn't the registered one)
-                    if self.hash_to_blocks.get(blk.hash) is blk:
-                        del self.hash_to_blocks[blk.hash]
-                    blk.hash = None
-                    blk.ref_count += 1
-                    pages.append(blk)
+for _ in range(num_pages_needed):
+    _, blk = self.free_kv_slots.popitem(last=False)
+    # only drop the map entry if it points to this block (a duplicate copy
+    # of the same prefix shares the hash but isn't the registered one)
+    if self.hash_to_blocks.get(blk.hash) is blk:
+        del self.hash_to_blocks[blk.hash]
+    blk.hash = None
+    blk.ref_count += 1
+    pages.append(blk)
 ```
 On completion, we decrease the ref count of the block. Special care is handled if refcount drops to 0, which means it's free again
 ```diff
-                 if req.done:
--                    self.free_kv_slots.extend(req.pages_idx)
-+                    for blk in reversed(req.pages):
-+                        blk.ref_count -= 1
-+                        if blk.ref_count == 0:
-+                            self.free_kv_slots[blk.block_idx] = blk
+ if req.done:
+-    self.free_kv_slots.extend(req.pages_idx)
++    for blk in reversed(req.pages):
++        blk.ref_count -= 1
++        if blk.ref_count == 0:
++            self.free_kv_slots[blk.block_idx] = blk
 ```
 
 We'll make a special benchmark for this, a shared-prefix workload (which is very similar to real world harness prompt workflows, etc). On this new workload, TTFT p50 goes down impressively from 47 -> 17.8 and p99 98 -> 31ms. 
@@ -698,89 +699,89 @@ class StaticDecodeData:
 
 We'll make a function that records decode graphs:
 ```python
-        for b in reversed(self.buckets):
-            decode = BatchDecodeWithPagedKVCacheWrapper(
-                self.ws,
-                kv_layout="HND",
-                use_cuda_graph=True,
-                use_tensor_cores=True,
-                paged_kv_indptr_buffer=self.data.paged_kv_indptr_gpu[: b + 1],
-                paged_kv_indices_buffer=self.data.paged_kv_indices_gpu,
-                paged_kv_last_page_len_buffer=self.data.last_page_lens_gpu[:b],
+for b in reversed(self.buckets):
+    decode = BatchDecodeWithPagedKVCacheWrapper(
+        self.ws,
+        kv_layout="HND",
+        use_cuda_graph=True,
+        use_tensor_cores=True,
+        paged_kv_indptr_buffer=self.data.paged_kv_indptr_gpu[: b + 1],
+        paged_kv_indices_buffer=self.data.paged_kv_indices_gpu,
+        paged_kv_last_page_len_buffer=self.data.last_page_lens_gpu[:b],
+    )
+
+    # meta = a dummy batch of b decodes
+    meta_gpu = self.data.view(meta, b)
+    decode.plan(...)
+
+    with torch.inference_mode():
+        # warmup:
+        for _ in range(3):
+            self.net(self.data.input_ids_gpu[:b], meta_gpu, kv_cache, decode)
+
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g, pool=mem_pool):
+            out = self.net(
+                self.data.input_ids_gpu[:b], meta_gpu, kv_cache, decode
             )
 
-            # meta = a dummy batch of b decodes
-            meta_gpu = self.data.view(meta, b)
-            decode.plan(...)
-
-            with torch.inference_mode():
-                # warmup:
-                for _ in range(3):
-                    self.net(self.data.input_ids_gpu[:b], meta_gpu, kv_cache, decode)
-
-                g = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(g, pool=mem_pool):
-                    out = self.net(
-                        self.data.input_ids_gpu[:b], meta_gpu, kv_cache, decode
-                    )
-
-            output[b] = (decode, g, out)
+    output[b] = (decode, g, out)
 ```
 
 We'll allow decode-only requests to pad, and look up decode requests
 ```diff
-         self.free_kv_slots = OrderedDict(
--            {i: Block(None, i, 0) for i in range(num_pages)}
-+            # page 0 is the dummy page the CUDA graphs' padding rows write into
-+            {i: Block(None, i, 0) for i in range(1, num_pages)}
-         )
+ self.free_kv_slots = OrderedDict(
+-    {i: Block(None, i, 0) for i in range(num_pages)}
++    # page 0 is the dummy page the CUDA graphs' padding rows write into
++    {i: Block(None, i, 0) for i in range(1, num_pages)}
+ )
 ```
 
 ```python
-        if nt == b and nt <= self.max_buckets:
-            # we can replay a graph
+if nt == b and nt <= self.max_buckets:
+    # we can replay a graph
 
-            # find max graph we can calc
-            pad_buckets = self.buckets[bisect_left(self.buckets, nt)]
-            return self.replay_graph(input_ids, meta, kv_cache, pad_buckets)
+    # find max graph we can calc
+    pad_buckets = self.buckets[bisect_left(self.buckets, nt)]
+    return self.replay_graph(input_ids, meta, kv_cache, pad_buckets)
 
-        else:
-            # eager mode
+else:
+    # eager mode
 ```
 
 ```python
-    def replay_graph(self, input_ids, meta, kv_cache, pad_to):
-        nt = input_ids.shape[0]
-        b = meta.indptr.shape[0] - 1
+def replay_graph(self, input_ids, meta, kv_cache, pad_to):
+    nt = input_ids.shape[0]
+    b = meta.indptr.shape[0] - 1
 
-        self.data.view(meta, pad_to)
-        self.data.input_ids_gpu[:nt].copy_(input_ids)
+    self.data.view(meta, pad_to)
+    self.data.input_ids_gpu[:nt].copy_(input_ids)
 
-        (decode_wrapper, g, out) = self.graphs[pad_to]
+    (decode_wrapper, g, out) = self.graphs[pad_to]
 
-        # pad to fit
-        paged_kv_indptr = torch.cat(
-            [
-                meta.paged_kv_indptr,
-                torch.arange(
-                    meta.paged_kv_indptr[-1] + 1,
-                    meta.paged_kv_indptr[-1] + 1 + pad_to - b,
-                    dtype=torch.int32,
-                ),
-            ]
-        )
-        paged_kv_indices = torch.nn.functional.pad(
-            meta.paged_kv_indices, (0, pad_to - b)
-        )
-        last_page_lens = torch.nn.functional.pad(
-            meta.last_page_lens, (0, pad_to - b), value=1
-        )
+    # pad to fit
+    paged_kv_indptr = torch.cat(
+        [
+            meta.paged_kv_indptr,
+            torch.arange(
+                meta.paged_kv_indptr[-1] + 1,
+                meta.paged_kv_indptr[-1] + 1 + pad_to - b,
+                dtype=torch.int32,
+            ),
+        ]
+    )
+    paged_kv_indices = torch.nn.functional.pad(
+        meta.paged_kv_indices, (0, pad_to - b)
+    )
+    last_page_lens = torch.nn.functional.pad(
+        meta.last_page_lens, (0, pad_to - b), value=1
+    )
 
-        decode_wrapper.plan(...)
+    decode_wrapper.plan(...)
 
-        g.replay()
+    g.replay()
 
-        return out[:nt]
+    return out[:nt]
 ```
 
 This mainly affects TPOT, with p50 going from 9.6 -> 6.7 (-30%), and consequently ITL (p99 23.3 -> 17.1), E2E and max TPS. 
@@ -825,57 +826,57 @@ We can split our current stepping function to two parts.
 
 We'll need to modify some parts to reuse the GPU data as well.
 ```diff
-     generated: int = 0
-     num_computed: int = 0
-+    num_scheduled: int = 0
+ generated: int = 0
+ num_computed: int = 0
++num_scheduled: int = 0
 ```
 
 ```python
-        row_of = {}
-        if self.in_flight is not None:
-            prev_batch = self.in_flight[0]  # to_process
-            row_of = {r.req_id: j for j, (r, b) in enumerate(prev_batch)}
+row_of = {}
+if self.in_flight is not None:
+    prev_batch = self.in_flight[0]  # to_process
+    row_of = {r.req_id: j for j, (r, b) in enumerate(prev_batch)}
 
-        if to_process:
-            ids, dst, src = [], [], []
-            for x, b in to_process:
-                start = x.num_computed + x.num_scheduled - b
-                if start < len(x.toks):
-                    ids.extend(x.toks[start : start + b])  # known, from the CPU
-                else:
-                    dst.append(len(ids))  # flat position in the packed input
-                    src.append(row_of[x.req_id])  # r's row in N
-                    ids.append(0)  # placeholder
+if to_process:
+    ids, dst, src = [], [], []
+    for x, b in to_process:
+        start = x.num_computed + x.num_scheduled - b
+        if start < len(x.toks):
+            ids.extend(x.toks[start : start + b])  # known, from the CPU
+        else:
+            dst.append(len(ids))  # flat position in the packed input
+            src.append(row_of[x.req_id])  # r's row in N
+            ids.append(0)  # placeholder
 
-            # pinned + non_blocking: a blocking copy would wait for step N to finish
-            ids_gpu = torch.tensor(ids).pin_memory().to(self.device, non_blocking=True)
-            if dst:
-                dst_gpu = (
-                    torch.tensor(dst).pin_memory().to(self.device, non_blocking=True)
-                )
-                src_gpu = (
-                    torch.tensor(src).pin_memory().to(self.device, non_blocking=True)
-                )
-                ids_gpu[dst_gpu] = self.in_flight[1][src_gpu]
+    # pinned + non_blocking: a blocking copy would wait for step N to finish
+    ids_gpu = torch.tensor(ids).pin_memory().to(self.device, non_blocking=True)
+    if dst:
+        dst_gpu = (
+            torch.tensor(dst).pin_memory().to(self.device, non_blocking=True)
+        )
+        src_gpu = (
+            torch.tensor(src).pin_memory().to(self.device, non_blocking=True)
+        )
+        ids_gpu[dst_gpu] = self.in_flight[1][src_gpu]
 ```
 
 ```python
-            next_gpu = prefill_out.argmax(-1)  # stays on the GPU: N+1's decode inputs
-            next_cpu = next_gpu.to("cpu", non_blocking=True)  # pinned, filled later
-            done = torch.cuda.Event()
-            done.record()  # fires once N's forward + argmax + copy have run
-            return to_process, next_gpu, next_cpu, done
+        next_gpu = prefill_out.argmax(-1)  # stays on the GPU: N+1's decode inputs
+        next_cpu = next_gpu.to("cpu", non_blocking=True)  # pinned, filled later
+        done = torch.cuda.Event()
+        done.record()  # fires once N's forward + argmax + copy have run
+        return to_process, next_gpu, next_cpu, done
 
-    def process(self, to_process, next_gpu, next_cpu, done):
-        toks = []
-        done.synchronize()  # waits for N's copy only, not for N+1
-        prefill_next_toks = next_cpu.tolist()
+def process(self, to_process, next_gpu, next_cpu, done):
+    toks = []
+    done.synchronize()  # waits for N's copy only, not for N+1
+    prefill_next_toks = next_cpu.tolist()
 
-        # finished in the previous process() or preempted since: drop the stale row
-        alive = {r.req_id for r in self.running}
-        for (req, b), t in zip(to_process, prefill_next_toks):
-            if req.req_id not in alive:
-                continue
+    # finished in the previous process() or preempted since: drop the stale row
+    alive = {r.req_id for r in self.running}
+    for (req, b), t in zip(to_process, prefill_next_toks):
+        if req.req_id not in alive:
+            continue
 ```
 
 This didn't do as much as I would have expected, since CUDA graphs helped us a lot. Perhaps our decode steps are also a little too short to gain full benefit from it. 
@@ -886,20 +887,37 @@ Code: [rung-09-overlap](https://github.com/GuyOnWifi/scheduler/tree/rung-09-over
 
 ## torch.compile 
 
-PyTorch eager mode runs seperate kernels for each operation, reading & writing to HBM many times. `torch.compile()` takes it and **fuses** the kernels together[^9], to make only one trip
+PyTorch eager mode runs separate kernels for each operation, reading & writing to HBM many times. `torch.compile()` takes it and **fuses** the kernels together[^9], to make only one trip
 
 ![Fusion: fewer round trips to memory](/llm_inference_engine/scheduler-15.webp)
 [Horace He's "Making Deep Learning Go Brrrr From First Principles"](https://horace.io/brrr_intro.html)
 
-Here's what the code;
+The code is extremely simple:
+```python
+self.net.forward = torch.compile(self.net.forward, dynamic=True)
+```
 
-We also need the write KV steps in there. `torch.compile` removes any in-place operations (for optimisation purposes), which causes it to rewrite our KV cache write into a copy-modify-store. 
+and we disable optimizations for some non-PyTorch native steps in attention[^10]:
+```py
+@torch.compiler.disable
+def _write_kv_and_attend(meta, kv_cache, k_rope, v_head, q_rope, wrapper):
+    page_idx = meta.slot_mappings // meta.page_size
+    offset_idx = meta.slot_mappings % meta.page_size
+    kv_cache[page_idx, 0, :, offset_idx] = k_rope
+    kv_cache[page_idx, 1, :, offset_idx] = v_head
+    return wrapper.run(q_rope, kv_cache)
+```
+We also need the write KV steps in there. `torch.compile` removes any in-place operations (for optimization purposes), which causes it to rewrite our KV cache write into a copy-modify-store. 
+
+Together with some tuning (`tok_budget` 512 -> 2048, KV pages 2048 -> 4096, and CUDA graphs recorded up to batch 128), this is our biggest single jump. Compile alone takes max TPS from 1451 -> ~1900, and the tuning gets the rest of the way to 2143. TPOT p50 goes from 6.1 -> 4.7ms and TTFT p50 from 39 -> 24ms, putting us right next to vLLM. 
+
+Code: [rung-10-compile](https://github.com/GuyOnWifi/scheduler/tree/rung-10-compile) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-09-overlap...rung-10-compile))
 
 ## Conclusion
 
-We roughly 10x'd our tok/s at max load in 9 steps, and our TTFT p50 went from 2241 to 39ms.
+We roughly 10x'd our tok/s at max load in 9 steps, and our TTFT p50 went from 2241 to 24ms.
 
-Big TPOT gains came mainly from kernel/engine work, whereas TTFT and ITL were usually shaped by scheduling decisions. On the same 3060, we're currently at about 65% of vLLM's throughput. Looking through their code, it seems that the remaining gains will likely be at the kernel/engine level. There's still a lot we can improve on. In the future, I'll look at kernel fusion using torch.compile and a bigger KV cache. Maybe we'll try tensor parallelism across GPUs too.
+Big TPOT gains came mainly from kernel/engine work, whereas TTFT and ITL were usually shaped by scheduling decisions. On the same 3060, we're currently at about 98% of vLLM's throughput. In the future, we'll try techniques like speculative decoding, and maybe try this engine on bigger models, which will require all sorts of parallelism techniques across GPUs.
 
 Implementing all of the rungs was very fun. The concepts were simple, but deciding how the server should behave under load is the hard part.
 
@@ -930,3 +948,5 @@ I really enjoyed writing this, and I hope you learnt something from this too :)
 [^8]: There are plenty more kernel-level optimizations that attention kernels use, but we won't go into them for this post. Do look at the [FlashAttention paper](https://arxiv.org/abs/2205.14135) if you're curious.
 
 [^9]: in [Triton](https://triton-lang.org/main/index.html)
+
+[^10]: PyTorch optimizations cause the in-place KV write to turn into a copy, update and copy back
