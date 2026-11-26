@@ -103,7 +103,7 @@ export default function RooflineExplorer() {
             <div className="overflow-hidden rounded-xl bg-white p-2 sm:p-4">
                 <svg viewBox={`0 0 ${VW} ${VH}`} className="block h-auto w-full" role="img" aria-labelledby={`${id}-t`} style={{ fontFamily: FONT }}>
                     <title id={`${id}-t`}>
-                        Roofline model for an RTX 3060: performance rises with batch size at {BW} GB/s until it reaches {PEAK} TFLOP/s at batch {Math.round(RIDGE)}.
+                        {`Roofline model for an RTX 3060: performance rises with batch size at ${BW} GB/s until it reaches ${PEAK} TFLOP/s at batch ${Math.round(RIDGE)}.`}
                     </title>
 
                     {board.map((d, i) => <Rough key={i} d={d} />)}

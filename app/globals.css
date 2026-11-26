@@ -380,6 +380,23 @@ body {
   overflow-y: hidden;
   padding: 0.25rem 0;
 }
+/* on phones, shrink display math a little and fade its right edge so a long
+   equation reads as scrollable. The fade sits over extra right padding, so
+   once you scroll to the end nothing is faded. */
+@media (max-width: 640px) {
+  .blog-content .katex-display {
+    font-size: 0.85em;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+  }
+  /* padding on the container isn't scrollable space, so pad the equation
+     itself; the negative margin keeps short equations centered */
+  .blog-content .katex-display > .katex {
+    display: inline-block;
+    padding-right: 2rem;
+    margin-right: -2rem;
+  }
+}
 
 /* The site lowercases body copy; math keeps its authored casing (V vs v). */
 .blog-content .katex {

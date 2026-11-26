@@ -127,6 +127,8 @@ interface PostMeta {
     description?: string;
     date?: string;
     tags?: string[];
+    /** keep the post's own casing instead of the site-wide lowercase */
+    keepCase?: boolean;
     /** term -> one-line definition, shown on hover (lib/rehypeGlossary.ts) */
     glossary?: Record<string, string>;
 }
@@ -262,13 +264,14 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                 year: "numeric",
                                 month: "long",
                                 day: "numeric",
+                                timeZone: "UTC", // "2026-11-20" parses as UTC midnight
                             }).toLowerCase()}
                         </time>
                     )}
                 </div>
             </header>
 
-            <article className="blog-content text-foreground/90">
+            <article className={`blog-content text-foreground/90${meta.keepCase ? " normal-case" : ""}`}>
                 <style dangerouslySetInnerHTML={{
                     __html: `.katex { color: inherit !important; }`,
                 }} />
@@ -317,13 +320,24 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         // with a stronger fill and a line under it.
                         th: ({ ...props }) => (
                             <th
-                                className="border-y border-foreground/20 bg-[color-mix(in_oklab,var(--background),var(--foreground)_12%)] px-4 py-3 text-center font-bold whitespace-nowrap first:rounded-tl-xl first:border-l first:text-left last:rounded-tr-xl last:border-r"
+                                className="border-y border-foreground/20 bg-[color-mix(in_oklab,var(--background),var(--foreground)_12%)] px-3 py-3 text-center font-bold whitespace-nowrap first:rounded-tl-xl first:border-l first:text-left last:rounded-tr-xl last:border-r"
                                 {...props}
                             />
                         ),
-                        td: ({ ...props }) => (
-                            <td className="border-b border-foreground/20 bg-[color-mix(in_oklab,var(--background),var(--foreground)_4%)] px-4 py-2.5 text-center align-top first:border-l first:text-left last:border-r" {...props} />
-                        ),
+                        td: ({ children, ...props }) => {
+                            // "p50 / p90 / p99" triplets stay on one line (the table scrolls instead)
+                            const triplet = typeof children === "string" && /^[\d.]+ \/ [\d.]+ \/ [\d.]+$/.test(children.trim());
+                            return (
+                                <td
+                                    className={`border-b border-foreground/20 bg-[color-mix(in_oklab,var(--background),var(--foreground)_4%)] py-2.5 text-center align-baseline first:border-l first:text-left last:border-r ${
+                                        triplet ? "whitespace-nowrap px-2 text-[0.85rem] tabular-nums" : "px-3"
+                                    }`}
+                                    {...props}
+                                >
+                                    {children}
+                                </td>
+                            );
+                        },
                         blockquote: ({ ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement>) => (
                             <blockquote className="border-l-4 border-accent pl-6 py-2 italic opacity-80 my-8 bg-foreground/[0.02] rounded-r-lg" {...props} />
                         ),

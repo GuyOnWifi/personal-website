@@ -2,6 +2,7 @@
 title: Building an LLM Inference Engine from Scratch
 description: what it takes to actually serve model weights in production
 date: 2026-11-20
+keepCase: true
 glossary:
   TTFT: "time to first token: how long from a request arriving until its first output token comes back."
   TPOT: "time per output token: the average gap between a request's output tokens, after the first one."
@@ -15,7 +16,7 @@ glossary:
 ---
 <video src="/llm_inference_engine/engine-hero.mp4" poster="/llm_inference_engine/engine-hero.webp"></video>
 
-**TL;DR:** Running an LLM is a simple loop. Serving it up to many users, making it fast, and fully utilizing the GPU is a systems problem. Through 10 optimizations, I'll show how to build an inference engine to serve up Qwen3-0.6B matching open-source engines behind most inference APIs (vLLM & SGLang).
+**TL;DR:** Running an LLM is a simple loop. Serving it up to many users, making it fast, and fully utilizing the GPU is a systems problem. Through 10 optimizations, I'll show how to build an inference engine to serve up Qwen3-0.6B, getting close to the open-source engines behind most inference APIs (vLLM & SGLang).
 
 There's a surprising amount of machinery behind every request you send to an inference API. Each request is added to a waiting queue amongst thousands of other requests. It has to be sliced and batched to run on GPU. The computation needs to compete with hundreds of other requests for very constrained GPU memory. And all this needs to be handled fast enough so you don't perceive a huge delay in your chats.  
 
@@ -62,6 +63,8 @@ To find this, we run 3 benchmarks:
 We mainly focus on the **serve** benchmark, as it is the most relevant to the real world. 
 
 We always do a warmup before benchmarking, for all of the JIT code to compile, kernels to be selected, etc.
+
+Each serve run sends 100 requests with random-token prompts: 512 input / 128 output tokens, with each length drawn uniformly within ±80%. Generation stops at EOS like a real server would, so outputs average ~90 tokens. Every number is from a single run, except SGLang's max TPS (mean of 3). vLLM 0.34.0 and SGLang 0.5.23 run with their defaults in bf16 (prefix caching off for the main table, on for the shared-prefix one), with SGLang capturing decode CUDA graphs up to batch 128. Our engine is benchmarked in-process while vLLM and SGLang go through their HTTP servers, which gives us a small edge on every latency number.[^12]
 
 Full results tables are in the [appendix](#appendix-full-results).
 
@@ -330,20 +333,20 @@ What we can do instead is:
 
 Here's a math visualization of why this works: 
 $$
-\begin{align}
+\begin{aligned}
 &(e^{x_{1} - m_{old}} + e^{x_{2} - m_{old}} + e^{x_{3} - m_{old}})(e^{m_{old} - m_{new}}) \\
 &= (e^{x_{1}-m_{old}})(e^{m_{old}-m_{new}}) + (e^{x_{2}-m_{old}})(e^{m_{old}-m_{new}}) + (e^{x_{3}-m_{old}})(e^{m_{old}-m_{new}}) \\
 &= (e^{x_{1}-m_{old}+m_{old}-m_{new}}) + (e^{x_{2}-m_{old}+m_{old}-m_{new}}) + (e^{x_{3}-m_{old}+m_{old}-m_{new}}) \\
 &= (e^{x_{1} - m_{new}} + e^{x_{2} - m_{new}} + e^{x_{3} - m_{new}})
-\end{align}
+\end{aligned}
 $$
 
 However, we still would need a value for each element of the row for the numerator! But remembering that attention multiplies each softmax value by their respective value vectors, we realize:
 $$
-\begin{align}
+\begin{aligned}
 &\frac{e^{x_1-\max(x)}}{\sum_{j} e^{x_j - \max(x)}} \cdot V_{1} + \frac{e^{x_2-\max(x)}}{\sum_{j} e^{x_j - \max(x)}} \cdot V_{2} + \frac{e^{x_3-\max(x)}}{\sum_{j} e^{x_j - \max(x)}} \cdot V_{3} \\
 &= \frac{\left( \sum_{i} e^{x_{i} - \max(x)}\cdot V_{i} \right)}{\sum_{j} e^{x_j - \max(x)}}
-\end{align}
+\end{aligned}
 $$
 
 And since this sum term also has a max, we can similarly do the rescaling trick we described earlier.[^8] 
@@ -639,36 +642,7 @@ Since buffer sizes have to be the same, we will record at batch size 1, 2, 4, 8,
 
 One thing to note: since our policy can mix prefills and decodes, if there's ever a mixed batch, our graph can't handle that.[^4]
 
-We'll need static buffers that we pass views into for our graphs
-```python
-class StaticDecodeData:
-    paged_kv_indptr_gpu: torch.Tensor
-    paged_kv_indices_gpu: torch.Tensor
-    last_page_lens_gpu: torch.Tensor
-    slot_mappings_gpu: torch.Tensor
-    positions_gpu: torch.Tensor
-    indptr_gpu: torch.Tensor
-    input_ids_gpu: torch.Tensor
-
-    # __init__: each one torch.zeros(max_batch, ...) on the GPU, allocated once
-
-    # takes in cpu made batch meta, returns a gpu batch meta
-    def view(self, meta: BatchMeta, pad_to):
-        nt = meta.positions.shape[0]
-        self.slot_mappings_gpu[:pad_to] = 0  # dummy slot
-        self.slot_mappings_gpu[:nt].copy_(meta.slot_mappings)
-        self.positions_gpu[:nt].copy_(meta.positions)
-
-        return BatchMeta(
-            meta.paged_kv_indptr,
-            meta.paged_kv_indices,
-            self.slot_mappings_gpu[:pad_to],
-            self.positions_gpu[:pad_to],
-            self.indptr_gpu[: pad_to + 1],
-            meta.last_page_lens,
-            meta.page_size,
-        )
-```
+We keep static GPU buffers (input ids, positions, slot mappings, page tables) allocated once at the biggest batch size. Each step copies its batch into them, since a graph can only read from the addresses it was recorded with.
 
 We'll make a function that records decode graphs:
 ```python
@@ -725,35 +699,14 @@ else:
 ```python
 def replay_graph(self, input_ids, meta, kv_cache, pad_to):
     nt = input_ids.shape[0]
-    b = meta.indptr.shape[0] - 1
-
-    self.data.view(meta, pad_to)
+    self.data.view(meta, pad_to)  # copy this batch into the static buffers
     self.data.input_ids_gpu[:nt].copy_(input_ids)
 
     (decode_wrapper, g, out) = self.graphs[pad_to]
-
-    # pad to fit
-    paged_kv_indptr = torch.cat(
-        [
-            meta.paged_kv_indptr,
-            torch.arange(
-                meta.paged_kv_indptr[-1] + 1,
-                meta.paged_kv_indptr[-1] + 1 + pad_to - b,
-                dtype=torch.int32,
-            ),
-        ]
-    )
-    paged_kv_indices = torch.nn.functional.pad(
-        meta.paged_kv_indices, (0, pad_to - b)
-    )
-    last_page_lens = torch.nn.functional.pad(
-        meta.last_page_lens, (0, pad_to - b), value=1
-    )
-
+    # pad indptr / indices / last_page_lens so rows nt..pad_to point at the dummy page
     decode_wrapper.plan(...)
 
     g.replay()
-
     return out[:nt]
 ```
 
@@ -795,14 +748,7 @@ def process(to_process, next_gpu, next_cpu, event):
     append tokens, hash full pages, free finished requests
 ```
 
-We can split our current stepping function to two parts.
-
-We'll need to modify some parts to reuse the GPU data as well.
-```diff
- generated: int = 0
- num_computed: int = 0
-+num_scheduled: int = 0
-```
+Each request also tracks `num_scheduled` (tokens launched but not processed yet), so the scheduler counts in-flight work as already done. The tricky part is that step N+1's inputs include tokens step N hasn't produced yet. We leave placeholders and fill them on the GPU straight from N's argmax:
 
 ```python
 row_of = {}
@@ -833,28 +779,12 @@ if to_process:
         ids_gpu[dst_gpu] = self.in_flight[1][src_gpu]
 ```
 
-```python
-        next_gpu = prefill_out.argmax(-1)  # stays on the GPU: N+1's decode inputs
-        next_cpu = next_gpu.to("cpu", non_blocking=True)  # pinned, filled later
-        done = torch.cuda.Event()
-        done.record()  # fires once N's forward + argmax + copy have run
-        return to_process, next_gpu, next_cpu, done
-
-def process(self, to_process, next_gpu, next_cpu, done):
-    toks = []
-    done.synchronize()  # waits for N's copy only, not for N+1
-    prefill_next_toks = next_cpu.tolist()
-
-    # finished in the previous process() or preempted since: drop the stale row
-    alive = {r.req_id for r in self.running}
-    for (req, b), t in zip(to_process, prefill_next_toks):
-        if req.req_id not in alive:
-            continue
-```
 
 This didn't do as much as I would have expected, likely since CUDA graphs already helped us a lot. Perhaps our decode steps are also a little too short to gain full benefit from it, which is likely the result of using a tiny 0.6B model.  
 
 However, under load (8 req/s, shared prefix), our ITL p99 drops from 16.2 -> 12.3 ms and TPOT p99 from 9.2 -> 8.3 ms. This is likely because under load, more steps mix prefills with decodes. Those steps run eagerly (no CUDA graph) and need more scheduling work, so there's more CPU time per step for overlapping to hide. 
+
+It isn't a free win though: TTFT got worse, with p99 going 66.7 -> 75.8 ms on the main benchmark and p50 17.0 -> 22.4 ms on the shared-prefix one.
 
 Code: [rung-09-overlap](https://github.com/GuyOnWifi/scheduler/tree/rung-09-overlap) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-08-graphs...rung-09-overlap))
 
@@ -881,12 +811,18 @@ def _write_kv_and_attend(meta, kv_cache, k_rope, v_head, q_rope, wrapper):
     return wrapper.run(q_rope, kv_cache)
 ```
 
-We'll also change our parameters (token_budget, num_pages) in order to squeeze out the performance. Our `num_pages` is sized to be as big as possible to fit on the GPU. We run a script to "auto-tune" and find the best token_budget. 
+We'll also tune our parameters with a quick hand sweep. Raising token_budget 512 -> 2048 is the big one: when lots of requests arrive at once, each step can prefill more of them. We also bump num_pages 2048 -> 4096 (enough for the whole benchmark) and record CUDA graphs up to batch 128.
 
-Doing these two gives us a huge jump. Compile alone takes max TPS from 1451 -> ~1900, and the tuning gets the rest of the way to 2143. TPOT p50 goes from 6.1 -> 4.7ms and TTFT p50 from 39 -> 24ms, putting us right next to vLLM. 
+At 1.8 req/s, compile does almost all of the work: on its own it takes TPOT p50 from 6.1 -> 4.6ms and TTFT p50 from 39 -> 27ms, and tuning barely moves those. Tuning matters at max load instead: compile alone takes max TPS from 1451 -> 1911, and tuning gets the rest of the way to 2143. Together, that puts us right next to vLLM on throughput. 
 
 Code: [rung-10-compile](https://github.com/GuyOnWifi/scheduler/tree/rung-10-compile) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-09-overlap...rung-10-compile))
 
+
+## Final Results
+
+The serve benchmark above only has about one request in flight at a time, so I also swept the arrival rate from 1 to 16 req/s. At low load we're 0.3-0.5 ms/token behind both engines, but as batches grow that per-step overhead gets spread across more tokens: by 8 req/s we're ahead of vLLM, and we stay within ~6% of SGLang (single runs, so treat these as rough).
+
+![Load sweep: TPOT vs arrival rate](/llm_inference_engine/charts/sweep.webp)
 
 ## Conclusion
 
@@ -921,7 +857,7 @@ I really enjoyed writing this, and I hope you learnt something from this too :)
 | graphs | 40.4 / 56.9 / 66.7 | 6.7 / 7.4 / 8.7 | 6.5 / 6.9 / 17.1 | 588 / 1403 / 1635 | 1380 |
 | overlap | 39.1 / 61.0 / 75.8 | 6.1 / 6.8 / 7.2 | 6.0 / 6.3 / 16.3 | 550 / 1299 / 1506 | 1451 |
 | compile + tuned | 24.1 / 33.5 / 48.1 | 4.7 / 5.3 / 5.9 | 4.5 / 4.9 / 8.8 | 428 / 975 / 1149 | 2143 |
-| **vLLM**[^12] | 24.9 / 34.9 / 46.0 | 4.2 / 4.6 / 4.8 | 4.3 / 4.6 / 5.2 | 381 / 908 / 1039 | 2176 |
+| vLLM | 24.9 / 34.9 / 46.0 | 4.2 / 4.6 / 4.8 | 4.3 / 4.6 / 5.2 | 381 / 908 / 1039 | 2176 |
 | SGLang | 24.3 / 34.3 / 46.2 | 4.0 / 4.4 / 5.0 | 4.0 / 4.3 / 6.0 | 355 / 848 / 988 | 2187 |
 
 

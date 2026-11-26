@@ -79,6 +79,7 @@ export default async function BlogListPage() {
                                             year: "numeric",
                                             month: "short",
                                             day: "numeric",
+                                            timeZone: "UTC", // "2026-11-20" parses as UTC midnight
                                         }).toLowerCase()}
                                     </time>
                                 )}
