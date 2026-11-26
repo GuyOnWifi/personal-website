@@ -357,6 +357,23 @@ body {
   --sidenote-gap: 2rem;
 }
 
+/* figures and tables break out of the text column a little on wide screens.
+   clear:right keeps them below any sidenote floating in the right gutter. */
+@media (min-width: 1024px) {
+  .blog-content .blog-wide {
+    margin-left: -3rem;
+    margin-right: -3rem;
+  }
+  /* a figure inside an already-wide block (a chart slide) stays at its parent's width */
+  .blog-content .blog-wide .blog-wide {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+@media (min-width: 1240px) {
+  .blog-content .blog-wide { clear: right; }
+}
+
 /* wide display math scrolls inside its own line instead of widening the page */
 .blog-content .katex-display {
   overflow-x: auto;

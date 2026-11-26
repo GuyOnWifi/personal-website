@@ -1,36 +1,50 @@
 ---
-title: Building an LLM Inference Engine
+title: Building an LLM Inference Engine from Scratch
 description: what it takes to actually serve model weights in production
 date: 2026-11-20
+glossary:
+  TTFT: "time to first token: how long from a request arriving until its first output token comes back."
+  TPOT: "time per output token: the average gap between a request's output tokens, after the first one."
+  ITL: "inter-token latency: the time between two consecutive tokens of the same request."
+  E2E: "end-to-end latency: the total time from a request arriving to its last token."
+  TPS: "tokens per second: output tokens generated per second, across all requests."
+  KV cache: "the attention keys and values of tokens already processed, stored so they don't have to be recomputed every step."
+  prefill: "the first pass over a prompt: every prompt token is processed at once, filling the KV cache."
+  decode: "generating new tokens, one per request per step, reading everything earlier from the KV cache."
+  HBM: "the GPU's main memory (VRAM): large, but far slower than the on-chip memory kernels compute from."
 ---
-Building an inference engine to serve up Qwen3-0.6b! 
+<video src="/llm_inference_engine/engine-hero.mp4" poster="/llm_inference_engine/engine-hero.webp"></video>
 
-We'll iteratively write the code and work through the following optimizations
-1) Static Batching
-2) KV Caching
-3) Continuous Batching
-4) Chunked Prefill (+ policy)
-5) Flash Attention (+ Ragged Tensors)
-6) Paged KV Cache
-7) Prefix Caching
-8) CUDA Graphs
-9) Overlap Scheduling
-10) torch.compile
+**TL;DR:** Running an LLM is a simple loop. Serving it up to many users, making it fast, and fully utilizing the GPU is a systems problem. Through 10 optimizations, I'll show how to build an inference engine to serve up Qwen3-0.6B matching open-source engines behind most inference APIs (vLLM & SGLang).
+
+There's a surprising amount of machinery behind every request you send to an inference API. Each request is added to a waiting queue amongst thousands of other requests. It has to be sliced and batched to run on GPU. The computation needs to compete with hundreds of other requests for very constrained GPU memory. And all this needs to be handled fast enough so you don't perceive a huge delay in your chats.  
+
+Most of these core concepts work on a single GPU. We'll iteratively write the code and work through the following optimizations
+1) [Static Batching](#static-batching)
+2) [KV Caching](#kv-caching)
+3) [Continuous Batching](#continuous-batching)
+4) [Chunked Prefill](#chunked-prefill) (+ policy)
+5) [Flash Attention](#flash-attention) (+ [Ragged Tensors](#ragged-tensors))
+6) [Paged KV Cache](#paged-kv-cache)
+7) [Prefix Caching](#prefix-caching)
+8) [CUDA Graphs](#cuda-graphs)
+9) [Overlap Scheduling](#overlap-scheduling)
+10) [torch.compile](#torchcompile)
 
 ## Results & Benchmarking
 
 <div data-chart-gallery>
-<img src="/llm_inference_engine/charts/ttft.webp" alt="Serve: TTFT" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/tpot.webp" alt="Serve: TPOT" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/itl.webp" alt="Serve: ITL" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/e2e.webp" alt="Serve: E2E" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/tps.webp" alt="Max throughput" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/pfx.webp" alt="Shared prefix: TTFT" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/dec.webp" alt="Latency: decode step" width="840" height="640" data-no-caption>
-<img src="/llm_inference_engine/charts/bat.webp" alt="Latency: whole batch" width="840" height="640" data-no-caption>
+<img src="/llm_inference_engine/charts/ttft.webp" alt="Serve: TTFT" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/tpot.webp" alt="Serve: TPOT" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/itl.webp" alt="Serve: ITL" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/e2e.webp" alt="Serve: E2E" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/tps.webp" alt="Max throughput" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/pfx.webp" alt="Shared prefix: TTFT" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/dec.webp" alt="Latency: decode step" width="1128" height="636" data-no-caption>
+<img src="/llm_inference_engine/charts/bat.webp" alt="Latency: whole batch" width="1128" height="636" data-no-caption>
 </div>
 
-We're benchmarking a Qwen3-0.6b in bf16 on an RTX 3060 12GB. We check for correctness against HuggingFace's implementation. 
+We're benchmarking a Qwen3-0.6B in bf16 on an RTX 3060 12GB. We check for correctness against HuggingFace's implementation. 
 
 We collect the following metrics:
 - **TTFT** - time to first token (how long it takes for the first generation)
@@ -49,66 +63,21 @@ We mainly focus on the **serve** benchmark, as it is the most relevant to the re
 
 We always do a warmup before benchmarking, for all of the JIT code to compile, kernels to be selected, etc.
 
-
-**Serve, random prompts at 1.8 req/s, plus max TPS** (ms, p50 / p90 / p99)
-
-| rung | TTFT <span data-chart="/llm_inference_engine/charts/ttft.webp" data-alt="Serve: TTFT"></span> | TPOT <span data-chart="/llm_inference_engine/charts/tpot.webp" data-alt="Serve: TPOT"></span> | ITL <span data-chart="/llm_inference_engine/charts/itl.webp" data-alt="Serve: ITL"></span> | E2E <span data-chart="/llm_inference_engine/charts/e2e.webp" data-alt="Serve: E2E"></span> | max TPS <span data-chart="/llm_inference_engine/charts/tps.webp" data-alt="Max throughput"></span> |
-| ------------- | ------------------- | ------------------- | ------------------- | ------------------- | ------------------- |
-| 01 naive      | (too slow to count) | (too slow to count) | (too slow to count) | (too slow to count) | (too slow to count) |
-| 02 kv cache   | 2241 / 4767 / 7589  | 18.1 / 21.5 / 29.1  | 18.1 / 21.5 / 22.8  | 3740 / 7422 / 9642  | 150                 |
-| 03 continuous | 57.2 / 97.6 / 184   | 17.9 / 23.9 / 28.9  | 16.1 / 24.4 / 75.9  | 1622 / 3852 / 4640  | 224                 |
-| 04 chunked    | 75.1 / 143 / 191    | 18.1 / 24.2 / 29.4  | 16.4 / 25.4 / 65.7  | 1616 / 3863 / 4582  | 222                 |
-| 05 flash-attn | 42.1 / 61.1 / 72.6  | 10.6 / 11.3 / 12.1  | 10.2 / 11.6 / 26.4  | 884 / 2169 / 2454   | 577                 |
-| 06 paged      | 41.0 / 59.7 / 70.2  | 9.6 / 10.8 / 12.0   | 9.0 / 10.7 / 23.1   | 808 / 1924 / 2144   | 1315                |
-| 07 prefix     | 41.4 / 59.9 / 70.7  | 9.6 / 10.3 / 11.2   | 9.2 / 10.7 / 23.3   | 858 / 1974 / 2232   | 1296                |
-| 08 graphs     | 40.4 / 56.9 / 66.7  | 6.7 / 7.4 / 8.7     | 6.5 / 6.9 / 17.1    | 588 / 1403 / 1635   | 1380                |
-| 09 overlap    | 39.1 / 61.0 / 75.8  | 6.1 / 6.8 / 7.2     | 6.0 / 6.3 / 16.3    | 550 / 1299 / 1506   | 1451                |
-| 10 compile + tuned | 24.1 / 33.5 / 48.1  | 4.7 / 5.3 / 5.9     | 4.5 / 4.9 / 8.8     | 428 / 975 / 1149    | 2143                |
-| vLLM          | 24.9 / 34.9 / 46.0  | 4.2 / 4.6 / 4.8     | 4.3 / 4.6 / 5.2     | 381 / 908 / 1039    | 2176                |
-| SGLang        | 25.3 / 34.0 / 39.3  | 4.0 / 4.4 / 4.9     | 4.0 / 4.3 / 6.1     | 355 / 850 / 986     | 2088                |
-
-
-**Serve, shared prefix (384 shared + ~128 own tokens) at 8 req/s**  (ms, p50 / p90 / p99)
-
-| rung | TTFT <span data-chart="/llm_inference_engine/charts/pfx.webp" data-alt="Shared prefix: TTFT"></span> | TPOT | ITL | E2E | out tok/s |
-| -------------------------- | ------------------ | ------------------ | ----------------- | ----------------- | --------- |
-| 06 paged (no prefix cache) | 47.0 / 70.8 / 97.9 | 11.6 / 13.7 / 31.7 | 9.9 / 12.4 / 32.5 | 926 / 2219 / 2796 | 601       |
-| 07 prefix                  | 17.8 / 23.4 / 30.8 | 9.2 / 10.1 / 11.9  | 8.7 / 10.5 / 16.3 | 757 / 1709 / 2090 | 619       |
-| 08 graphs                  | 17.0 / 21.4 / 28.2 | 7.2 / 7.9 / 9.2    | 6.9 / 7.6 / 16.2  | 607 / 1352 / 1689 | 636       |
-| 09 overlap                 | 22.4 / 27.0 / 33.8 | 6.6 / 7.1 / 8.3    | 6.4 / 7.1 / 12.3  | 538 / 1236 / 1522 | 633       |
-| 10 compile + tuned         | 16.0 / 18.9 / 23.5 | 4.9 / 5.2 / 5.8    | 4.8 / 5.1 / 9.5   | 382 / 910 / 1138  | 623       |
-| vLLM                       | 18.0 / 20.9 / 26.3 | 4.7 / 5.0 / 6.1    | 4.6 / 4.9 / 10.4  | 359 / 878 / 1123  | 610       |
-| SGLang                     | 18.0 / 21.4 / 26.5 | 4.4 / 4.7 / 5.8    | 4.2 / 4.6 / 12.2  | 354 / 833 / 1041  | 637       |
-
-**Latency, closed loop: batch 8, 128 in / 64 out**  (ms, p50 / p90 / p99)
-
-| rung | decode step <span data-chart="/llm_inference_engine/charts/dec.webp" data-alt="Latency: decode step"></span> | prefill | batch <span data-chart="/llm_inference_engine/charts/bat.webp" data-alt="Latency: whole batch"></span> |
-|---|---|---|---|
-| 01 naive | 83.6 / 99.9 / 103 | 66.0 / 66.1 / 66.1 | 5482 / 5483 / 5484 |
-| 02 kv cache | 11.2 / 12.3 / 12.8 | 68.0 / 68.9 / 69.1 | 793 / 796 / 797 |
-| 03 continuous | 12.3 / 13.0 / 13.9 | 70.1 / 70.1 / 70.1 | 846 / 847 / 847 |
-| 04 chunked | 12.8 / 13.5 / 49.0 | 38.6 / 38.6 / 38.6 | 910 / 920 / 922 |
-| 05 flash-attn | 9.6 / 10.8 / 30.9 | 30.6 / 30.7 / 30.8 | 684 / 712 / 718 |
-| 06 paged | 9.1 / 10.6 / 29.9 | 29.4 / 29.5 / 29.5 | 661 / 664 / 665 |
-| 07 prefix | 9.4 / 10.4 / 11.2 | 11.0 / 11.1 / 11.1\* | 606 / 615 / 617 |
-| 08 graphs | 6.7 / 6.9 / 7.1 | 12.0 / 12.5 / 12.6 | 435 / 435 / 436 |
-| 09 overlap | 6.1 / 6.2 / 6.3 | 9.3 / 9.7 / 9.8 | 405 / 405 / 405 |
-| 10 compile + tuned | 4.6 / 4.7 / 4.7 | 5.9 / 6.2 / 8.2 | 305 / 306 / 307 |
-
-\*Prefix cache hits: the bench reruns the same prompts.
-
+Full results tables are in the [appendix](#appendix-full-results).
 
 All code is on [GitHub](https://github.com/GuyOnWifi/scheduler)
 ## Summary of Qwen
 
 ![Qwen3 architecture: 28 stacked decoder layers](/llm_inference_engine/scheduler-01.webp)
 
-Hopefully this summarizes the Qwen architecture well enough! It is very similar to the original [attention paper](https://arxiv.org/abs/1706.03762) with the following changes:
-- [RoPE](https://arxiv.org/abs/2104.09864) ([good resource](https://huggingface.co/blog/designing-positional-encoding))
-- [Grouped-Query Attention](https://arxiv.org/abs/2305.13245) 
-- RMSNorm
+Qwen is very similar to the original [attention paper](https://arxiv.org/abs/1706.03762) with the following changes:
+- [RoPE](https://arxiv.org/abs/2104.09864) ([good resource](https://huggingface.co/blog/designing-positional-encoding)): A way of introducing "position" into the attention mechanism by rotating vectors
+- [Grouped-Query Attention](https://arxiv.org/abs/2305.13245): Every head of attention gets a query matrix, but the key and value matrix are shared between some heads. 
+- RMSNorm (instead of LayerNorm): A more computationally efficient normalization scheme
+- QKNorm: Apply RMS Norm to the key and query vectors, before RoPE and their dot product
+- SwiGLU: Train a "gate matrix", and multiply the output by that gate matrix. Uses the [SiLU activation function](https://docs.pytorch.org/docs/2.15/_images/SiLU.png) for the gate matrix. Allows it to selectively scale individual neurons. 
 
-You can check out the basic impl of qwen at commit [0d4e790](https://github.com/GuyOnWifi/scheduler/commit/0d4e790ca9f59124dbc72e253203135cddd76b68)
+You can check out the PyTorch implementation of Qwen3 at commit [0d4e790](https://github.com/GuyOnWifi/scheduler/commit/0d4e790ca9f59124dbc72e253203135cddd76b68)
 
 We will wrap our model with the following entry point:
 ```python 
@@ -137,20 +106,20 @@ class Engine(Protocol):
 
 ## Static Batching 
 
-Generating tokens is very memory intensive. The GPU has to stream the entire model's weights from memory for every decode step, which only generates one token per sequence. For example, Qwen3-0.6B takes roughly 1.2 GB[^1] in model weights. Assuming a memory bandwidth of 360 GB/s (on my 3060), 
+Generating tokens is very memory intensive. The GPU has to stream the entire model's weights from memory for every decode step, which only generates one token per sequence. For example, Qwen3-0.6B takes roughly 1.2 GB (bf16) in model weights. Assuming a memory bandwidth of 360 GB/s (on my 3060), 
 
 $$
 \text{TPS} = \frac{\text{Memory Bandwidth}}{\text{Model Weight Size}} = \frac{360}{1.2}=300\;\text{tok/s}
 $$
 
-![Roofline: small batches sit memory-bound](/llm_inference_engine/scheduler-02.webp)
+<div data-roofline></div>
 
-But that's only for one sequence! Small requests don't saturate our compute cores, and are bottlenecked by our memory bandwidth. We can usually increase our batch size (which reuses each weight read across the whole batch) and increase our total tok/s roughly proportionally (to a point, until compute dominates).
+But that's only for one sequence! Small requests don't saturate our compute cores, and are bottlenecked by our memory bandwidth. We can usually increase our batch size (which reuses each weight read across the whole batch) and increase our total tok/s roughly proportionally[^1] (to a point, until compute dominates).[^3]
 
 So the first strategy in our serving engine is to:
 1) Maintain a queue of requests
 2) Drain the queue, with some max amount 
-3) Generate tokens with (hopefully) more than 1 batch at once until they're all done
+3) Generate tokens with (hopefully) more than 1 sequence at once until they're all done
 4) Output / stream the tokens
 
 Code: [rung-01-naive](https://github.com/GuyOnWifi/scheduler/tree/rung-01-naive) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-00-qwen...rung-01-naive))
@@ -163,8 +132,7 @@ The K and V of previous tokens don't change when we add a new token! So we can c
 
 ![KV cache: reuse past keys, values](/llm_inference_engine/scheduler-03.webp)
 
-So with KV caching, we can split up our engine into two phases: prefill (prompt processing), where we attend to every token on every layer, storing the KV cache, and decode, where we use the KV cache to calculate the next token and grow it by 1 token. 
-
+So with KV caching, we can split up our engine into two phases: prefill (prompt processing), where we attend to every token on every layer, storing the KV cache, and decode, where we use the KV cache to calculate the next token and grow the cache by 1 token. 
 
 We add positions to the BatchMeta
 ```diff
@@ -251,7 +219,7 @@ In our code, this means that we'll need to give each request a "slot" to store i
      positions: torch.Tensor
 ```
 
-We'll store the free_kv slots in each one 
+We'll store the free_kv slots in the engine 
 ```diff
  def __init__(self, model: Model, n_batch=8, max_len=2048):
      self.n_batch = n_batch
@@ -298,19 +266,19 @@ After processing the tokens:
 
 Since we're no longer blocking waiting for our entire batch, we see insane improvements in TTFT p50 (2241 -> 57ms, 39x!). We see similar gains in E2E p50 (3740 -> 1622 ms) and max TPS (150 -> 224). TPOT remains unchanged since we only really change how we schedule, not the engine steps itself. 
 
-This comes at the cost of higher ITL p99 (22.8 -> 75.9), since a new request's whole prefill causes a spike and stalls everyone's decode, which we'll solve in the next section. 
+This comes at the cost of higher ITL p99 (22.8 -> 75.9), since a new request's prefill causes a spike and stalls everyone's decode, which we'll solve in the next section. 
 
 Code: [rung-03-continuous](https://github.com/GuyOnWifi/scheduler/tree/rung-03-continuous) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-02-kv-cache...rung-03-continuous))
 
 ## Chunked Prefill
 
-Currently, on admission, we prefill the entire prompt so our batching strategy looks a little more like this: 
+Currently, on admission, we prefill the entire prompt, so our batching strategy looks a little more like this: 
 
 ![Unchunked prefill stalls every decoding sequence](/llm_inference_engine/scheduler-05.webp)
 
-How we choose to schedule our prefills/decode depends on our **policy**. We're gonna copy vLLM's policy here: set a `token_budget`, representing the amount of tokens we process. Decode always needs a token_budget of 1 (since previous tokens are cached, and we don't need them), while a prefill's token_budget is the number of tokens not in the KV Cache yet. 
+How we choose to schedule our prefills/decode depends on our **policy**. We're gonna copy vLLM's policy here: set a `token_budget`, representing the amount of tokens we process. Decode always needs a `token_budget` of 1 (since previous tokens are cached, and we don't need them), while a prefill's `token_budget` is the number of tokens not in the KV Cache yet. 
 
-We prioritize all of the decodes, and then prefill the remaining `token_budget` tokens. Since decode is memory bound, prefills ride "for free". 
+We prioritize all of the decodes, and then prefill the remaining `token_budget` tokens. Since decode is memory bound, prefills ride "for free" (up to a certain point). 
 
 Since our requests now might not be fully prefilled, we need a way to store how many tokens we have prefilled. We store `num_computed`, which is the number of prefilled tokens. Note that for all decode, `toks - num_computed` = 1.
 
@@ -336,21 +304,21 @@ We add a core loop to check for the "budget":
 +    budget -= b
 ```
 
-And with this, our ITL p99 goes from 75.9 -> 65.7. It does come at the cost of slightly higher TTFT (57 -> 75.1ms) since we don't prefill the entire thing immediately. 
+And with this, our ITL p99 goes from 75.9 -> 65.7. It does come at the cost of slightly higher TTFT (57 -> 75.1ms) since we don't prefill the entire sequence immediately, so long sequences will need to wait multiple steps for their first token. 
 
 Code: [rung-04-chunked](https://github.com/GuyOnWifi/scheduler/tree/rung-04-chunked) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-03-continuous...rung-04-chunked))
 
 ## Flash Attention 
 
 Currently, our attention is materializing an $n \times n$ matrix. This is bad for 2 reasons:
-1) Moving that huge matrix in and out of HBM is slow, which is necessary when the GPU needs to perform ops like softmax
-2) Uses O(n^2) space 
+1) Moving that huge matrix in and out of HBM/VRAM is slow, which is necessary when the GPU needs to perform ops like softmax
+2) Uses O(n^2) space, which will constrain the maximum size of our KV cache
 
 ![Every query scores against every key](/llm_inference_engine/scheduler-06.webp)
 
-The core optimization behind fast attention kernels like **[FlashAttention](https://arxiv.org/abs/2205.14135)**, is online softmax (running softmax). If we're able to somehow make an "accumulator" for each row of softmax, we can decrease our memory from O(n^2) to O(n) (one accumulator per row) by calculating an element, updating the accumulator and then discarding it.
+We'll use fast attention kernels like **[FlashAttention](https://arxiv.org/abs/2205.14135)**. The core optimization behind FlashAttention is tiling Q, K and V through on-chip SRAM in one fused kernel, so the $n \times n$ matrix never gets written to HBM/VRAM. What makes that possible is online softmax (running softmax). If we're able to somehow make an "accumulator" for each row of softmax, we can decrease our memory from O(n^2) to O(n) (one accumulator per row) by calculating an element, updating the accumulator and then discarding it.
 
-The hard part is how do we do online softmax. For numerically stable softmax, we need to subtract the maximum value
+The hard part is how do we do online softmax. For numerically stable softmax, we need to subtract the maximum value (to prevent overflows)
 $$
 \frac{e^{x_i-\max(x)}}{\sum_{j} e^{x_j - \max(x)}}
 $$
@@ -378,20 +346,21 @@ $$
 \end{align}
 $$
 
-And since this sum term also has a max, we can similarly do the rescaling trick we described earlier.[^8]
+And since this sum term also has a max, we can similarly do the rescaling trick we described earlier.[^8] 
+
+Online softmax allows us to calculate the value one at a time, updating the accumulator, and discarding it. This means we'll calculate the full $n \times n$ matrix, but we won't need to materialize the full thing in our memory. 
 
 We'll use [FlashInfer](https://github.com/flashinfer-ai/flashinfer) for our kernels. 
 
 ### Ragged Tensors
 
 Before we can dive into the implementation, we'll have to make everything have **ragged tensors**.[^6] 
+
 ![Padded batch versus ragged CSR layout](/llm_inference_engine/scheduler-07.webp)
 
-Ragged tensors store it as two elements: a list of "pointers"[^7] and the data. The $i$th element of the "pointers" is where the $i$th data starts in the data list. The $i+1$th element of pointers is where the $i$th data ends (non-inclusive). In other words, `data_ptr` stores the ranges of each piece of data. 
+Ragged tensors store it as two elements: a list of "pointers" and the data. The $i$th element of the "pointers" is where the $i$th data starts in the data list. The $i+1$th element of pointers is where the $i$th data ends (non-inclusive). In other words, `data_ptr` stores the ranges of each piece of data. 
 
-This is optimal because it allows us to skip padding uneven sequences into a tensor, saving us memory. And also because FlashInfer's kernels take this layout. 
-
-It is a bit of work rewriting everything to use ragged pointers however... you can check out the code 
+This is optimal because it allows us to skip padding uneven sequences into a tensor, saving us memory. Many attention kernels, FlashInfer's included, use this layout. 
 
 --- 
 
@@ -414,7 +383,7 @@ It is a bit of work rewriting everything to use ragged pointers however... you c
 +)
 ```
 
-FlashInfer requires us to call plan() first with the indptr (the pointer part of the input_ids ragged tensor), as well as a ragged tensor of where the paged_kv lives. For now, each slot is just one giant page of size `max_len`; we'll make real pages later. 
+FlashInfer requires us to call plan() first with the indptr (the pointer part of the input_ids ragged tensor), as well as a ragged tensor of where the paged_kv lives[^11]. For now, each slot is just one giant page of size `max_len`; we'll make real pages later. 
 
 ```diff
 +rows = meta.slot_ids.repeat_interleave(meta.lengths)
@@ -424,9 +393,9 @@ FlashInfer requires us to call plan() first with the indptr (the pointer part of
 +out = prefill_wrapper.run(q_rope, (k_cache, v_cache))  # (N, qh, hd)
 ```
 
-But now, we handle the store into KV cache, and we just call FlashInfer's kernel on it and we're done! 
+Once we've stored into the KV cache, we just call FlashInfer's kernel on it to get our value. 
 
-This new attention kernel (and getting rid of padding) affects how fast we can decode, so it brings our TPOT p50 from 18.1 -> 10.6 ms and p99 from 29.4 -> 12.1. Thanks to this improvement, it also helps out with E2E, max TPS, and ITL. 
+This new attention kernel (and getting rid of padding) affects how fast we can decode, so it brings our TPOT p50 from 18.1 -> 10.6 ms and p99 from 29.4 -> 12.1. Because we're speeding up how long it takes to calculate a token, it also helps out with E2E, max TPS, and ITL. 
 
 Code: [rung-05-flash-attn](https://github.com/GuyOnWifi/scheduler/tree/rung-05-flash-attn) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-04-chunked...rung-05-flash-attn))
 
@@ -472,10 +441,12 @@ Now that we have more complex paging mechanism, the engine needs to be the one c
 +    page_size: int
 ```
 
-The logic for this is a lot more fun now that we need to handle
+Our engine will now need to: 
 1) On admission, allocate KV cache
 2) On completion, deallocating
-3) Preempting if not enough space
+3) **Preempt** if there's not enough space
+
+Preemption for this engine will mean putting back into the waiting queue, and re-prefilling once there's enough space.
 
 ```python
 # 1) admission: only admit if the prompt's pages fit
@@ -534,7 +505,7 @@ if len(r.toks) > self.page_size * len(r.pages_idx):
             r.pages_idx.append(self.free_kv_slots.popleft())
 ```
 
-There's almost no change in any metrics, except for max TPS since we can have more concurrent requests. It goes from 577 -> 1315 tok/s
+We didn't really change much about our engine, except for the fact that it can now handle more concurrent requests with the same amount of memory. Our max TPS goes from 577 -> 1315 tok/s, while other metrics remain the same. 
 
 Code: [rung-06-paged](https://github.com/GuyOnWifi/scheduler/tree/rung-06-paged) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-05-flash-attn...rung-06-paged))
 
@@ -544,7 +515,7 @@ A token's KV only depends on the tokens before it, so prompts that share a prefi
 
 ![Prefix caching: hash chains over full blocks](/llm_inference_engine/scheduler-09.webp)
 
-We're going to do vLLM-style hash-based prefix lookups.[^5] Each block is hashed based on the previous block's hash and its current token ids. When we admit a request, we compute a similar hash to find the longest prefix match, and instead of recomputing, mark those as computed and use that block. 
+We're going to do vLLM-style hash-based prefix lookups.[^5] Each block is hashed based on the previous block's hash and its current token ids. When we admit a request, we similarly compute its block hashes to find the longest prefix match, and instead of recomputing, mark the prefix computed and use those blocks. 
 
 Note that blocks that aren't 100% full won't be counted, since they might still be written into. 
 
@@ -576,6 +547,7 @@ We'll store a way to lookup blocks by dict:
 +self.hash_to_blocks = {}
 ```
 
+Here's the code for the hashing scheme:
 ```python
 # (after the forward, for each page that just filled up)
 # hash the blocks
@@ -640,6 +612,7 @@ for _ in range(num_pages_needed):
     blk.ref_count += 1
     pages.append(blk)
 ```
+
 On completion, we decrease the ref count of the block. Special care is handled if refcount drops to 0, which means it's free again
 ```diff
  if req.done:
@@ -650,7 +623,7 @@ On completion, we decrease the ref count of the block. Special care is handled i
 +            self.free_kv_slots[blk.block_idx] = blk
 ```
 
-We'll make a special benchmark for this, a shared-prefix workload (which is very similar to real world harness prompt workflows, etc). On this new workload, TTFT p50 goes down impressively from 47 -> 17.8 and p99 98 -> 31ms. 
+We'll make a special benchmark for this, a shared-prefix workload (which is very similar to real world multi-turn chat workloads & system prompts). On this new workload, TTFT p50 goes down impressively from 47 -> 17.8 and p99 98 -> 31ms. 
 
 Code: [rung-07-prefix](https://github.com/GuyOnWifi/scheduler/tree/rung-07-prefix) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-06-paged...rung-07-prefix))
 
@@ -662,7 +635,7 @@ Right now, we're executing in **eager** mode, meaning our PyTorch code is going 
 
 CUDA Graphs solves that. You can record a series of kernel launches, and then instantly replay with no additional CPU work. The only constraint is that everything has to be the same: the same GPU buffers, same buffer sizes, same kernels, etc. These restrictions only make it feasible for decode, where the input shapes are consistent (1 token per request). 
 
-Since buffer sizes have to be the same, we will record at batch size 1, 2, 4, 8, 16, 32, 64. We will then find the nearest one, and pad our inputs up to that appropriate batch size[^3] and replay the graph. 
+Since buffer sizes have to be the same, we will record at batch size 1, 2, 4, 8, 16, 32, 64. We will then find the nearest one, and pad our inputs up to that batch size and replay the graph. The padding rows write into a reserved "dummy" KV cache page, so they never touch a real request's cache. 
 
 One thing to note: since our policy can mix prefills and decodes, if there's ever a mixed batch, our graph can't handle that.[^4]
 
@@ -679,7 +652,7 @@ class StaticDecodeData:
 
     # __init__: each one torch.zeros(max_batch, ...) on the GPU, allocated once
 
-    # takes in cpu made batch meta, returns a gpu batch meta)
+    # takes in cpu made batch meta, returns a gpu batch meta
     def view(self, meta: BatchMeta, pad_to):
         nt = meta.positions.shape[0]
         self.slot_mappings_gpu[:pad_to] = 0  # dummy slot
@@ -784,7 +757,7 @@ def replay_graph(self, input_ids, meta, kv_cache, pad_to):
     return out[:nt]
 ```
 
-This mainly affects TPOT, with p50 going from 9.6 -> 6.7 (-30%), and consequently ITL (p99 23.3 -> 17.1), E2E and max TPS. 
+Since this optimizes our decode step, it mainly affects TPOT, with p50 going from 9.6 -> 6.7 (-30%), and consequently ITL (p99 23.3 -> 17.1), E2E and max TPS. 
 
 Code: [rung-08-graphs](https://github.com/GuyOnWifi/scheduler/tree/rung-08-graphs) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-07-prefix...rung-08-graphs))
 
@@ -879,20 +852,20 @@ def process(self, to_process, next_gpu, next_cpu, done):
             continue
 ```
 
-This didn't do as much as I would have expected, since CUDA graphs helped us a lot. Perhaps our decode steps are also a little too short to gain full benefit from it. 
+This didn't do as much as I would have expected, likely since CUDA graphs already helped us a lot. Perhaps our decode steps are also a little too short to gain full benefit from it, which is likely the result of using a tiny 0.6B model.  
 
-However under load (8req/s), our TPOT p99 halves, going from 32 -> 16. This is likely because under load, more steps mix prefills with decodes. Those steps run eagerly (no CUDA graph) and need more scheduling work, so there's more CPU time per step for overlapping to hide. 
+However, under load (8 req/s, shared prefix), our ITL p99 drops from 16.2 -> 12.3 ms and TPOT p99 from 9.2 -> 8.3 ms. This is likely because under load, more steps mix prefills with decodes. Those steps run eagerly (no CUDA graph) and need more scheduling work, so there's more CPU time per step for overlapping to hide. 
 
 Code: [rung-09-overlap](https://github.com/GuyOnWifi/scheduler/tree/rung-09-overlap) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-08-graphs...rung-09-overlap))
 
 ## torch.compile 
 
-PyTorch eager mode runs separate kernels for each operation, reading & writing to HBM many times. `torch.compile()` takes it and **fuses** the kernels together[^9], to make only one trip
+PyTorch eager mode runs separate kernels for each operation, reading & writing to HBM many times. `torch.compile()` takes it and **fuses** the kernels together[^9], to make only one trip.
 
 ![Fusion: fewer round trips to memory](/llm_inference_engine/scheduler-15.webp)
 [Horace He's "Making Deep Learning Go Brrrr From First Principles"](https://horace.io/brrr_intro.html)
 
-The code is extremely simple:
+The code to use compilation is extremely simple:
 ```python
 self.net.forward = torch.compile(self.net.forward, dynamic=True)
 ```
@@ -907,19 +880,21 @@ def _write_kv_and_attend(meta, kv_cache, k_rope, v_head, q_rope, wrapper):
     kv_cache[page_idx, 1, :, offset_idx] = v_head
     return wrapper.run(q_rope, kv_cache)
 ```
-We also need the write KV steps in there. `torch.compile` removes any in-place operations (for optimization purposes), which causes it to rewrite our KV cache write into a copy-modify-store. 
 
-Together with some tuning (`tok_budget` 512 -> 2048, KV pages 2048 -> 4096, and CUDA graphs recorded up to batch 128), this is our biggest single jump. Compile alone takes max TPS from 1451 -> ~1900, and the tuning gets the rest of the way to 2143. TPOT p50 goes from 6.1 -> 4.7ms and TTFT p50 from 39 -> 24ms, putting us right next to vLLM. 
+We'll also change our parameters (token_budget, num_pages) in order to squeeze out the performance. Our `num_pages` is sized to be as big as possible to fit on the GPU. We run a script to "auto-tune" and find the best token_budget. 
+
+Doing these two gives us a huge jump. Compile alone takes max TPS from 1451 -> ~1900, and the tuning gets the rest of the way to 2143. TPOT p50 goes from 6.1 -> 4.7ms and TTFT p50 from 39 -> 24ms, putting us right next to vLLM. 
 
 Code: [rung-10-compile](https://github.com/GuyOnWifi/scheduler/tree/rung-10-compile) ([diff vs previous](https://github.com/GuyOnWifi/scheduler/compare/rung-09-overlap...rung-10-compile))
 
+
 ## Conclusion
 
-We roughly 10x'd our tok/s at max load in 9 steps, and our TTFT p50 went from 2241 to 24ms.
+We roughly 14x'd our tok/s at max load in 8 steps (150 -> 2143), and our TTFT p50 went from 2241 to 24ms.
 
-Big TPOT gains came mainly from kernel/engine work, whereas TTFT and ITL were usually shaped by scheduling decisions. On the same 3060, we're currently at about 98% of vLLM's throughput. In the future, we'll try techniques like speculative decoding, and maybe try this engine on bigger models, which will require all sorts of parallelism techniques across GPUs.
+Big TPOT gains came mainly from kernel/engine work, whereas TTFT and ITL were usually shaped by scheduling decisions. On the same 3060, we're currently at about 98% of vLLM's throughput. In the future, we'll try techniques like speculative decoding, and maybe try this engine on bigger models & GPUs, which will require all sorts of parallelism techniques across GPUs.
 
-Implementing all of the rungs was very fun. The concepts were simple, but deciding how the server should behave under load is the hard part.
+Implementing all of the rungs was very fun. The concepts were simple, but deciding how the server should behave under load is the hard part. It's extremely easy to come up with policies that have great average latencies / throughputs, but *terrible* tails due to starvation. 
 
 I really enjoyed writing this, and I hope you learnt something from this too :)
 
@@ -930,23 +905,74 @@ I really enjoyed writing this, and I hope you learnt something from this too :)
 - For Qwen's architecture: [Attention Is All You Need](https://arxiv.org/abs/1706.03762),  [RoFormer: Rotary Position Embedding (RoPE)](https://arxiv.org/abs/2104.09864), [GQA: Grouped-Query Attention](https://arxiv.org/abs/2305.13245), [Designing Positional Encoding (Hugging Face blog)](https://huggingface.co/blog/designing-positional-encoding)
 - [Nano vLLM](https://github.com/GeeeekExplorer/nano-vllm), the project that inspired this
 
+## Appendix: Full Results
 
-[^1]: bf16 weights
+**Serve, random prompts at 1.8 req/s, plus max TPS** (ms, p50 / p90 / p99)
 
-[^2]: Think a dynamic array vs a linked list
+| | TTFT <span data-chart="/llm_inference_engine/charts/ttft.webp" data-alt="Serve: TTFT"></span> | TPOT <span data-chart="/llm_inference_engine/charts/tpot.webp" data-alt="Serve: TPOT"></span> | ITL <span data-chart="/llm_inference_engine/charts/itl.webp" data-alt="Serve: ITL"></span> | E2E <span data-chart="/llm_inference_engine/charts/e2e.webp" data-alt="Serve: E2E"></span> | max TPS <span data-chart="/llm_inference_engine/charts/tps.webp" data-alt="Max throughput"></span> |
+| ------------------ | ---------------------- | ------------------- | ------------------- | -------------------- | ------------------- |
+| naive | (too slow to count) | (too slow to count) | (too slow to count) | (too slow to count) | (too slow to count) |
+| kv cache | 2241 / 4767 / 7589 | 18.1 / 21.5 / 29.1 | 18.1 / 21.5 / 22.8 | 3740 / 7422 / 9642 | 150 |
+| continuous | 57.2 / 97.6 / 184 | 17.9 / 23.9 / 28.9 | 16.1 / 24.4 / 75.9 | 1622 / 3852 / 4640 | 224 |
+| chunked | 75.1 / 143 / 191 | 18.1 / 24.2 / 29.4 | 16.4 / 25.4 / 65.7 | 1616 / 3863 / 4582 | 222 |
+| flash-attn | 42.1 / 61.1 / 72.6 | 10.6 / 11.3 / 12.1 | 10.2 / 11.6 / 26.4 | 884 / 2169 / 2454 | 577 |
+| paged | 41.0 / 59.7 / 70.2 | 9.6 / 10.8 / 12.0 | 9.0 / 10.7 / 23.1 | 808 / 1924 / 2144 | 1315 |
+| prefix | 41.4 / 59.9 / 70.7 | 9.6 / 10.3 / 11.2 | 9.2 / 10.7 / 23.3 | 858 / 1974 / 2232 | 1296 |
+| graphs | 40.4 / 56.9 / 66.7 | 6.7 / 7.4 / 8.7 | 6.5 / 6.9 / 17.1 | 588 / 1403 / 1635 | 1380 |
+| overlap | 39.1 / 61.0 / 75.8 | 6.1 / 6.8 / 7.2 | 6.0 / 6.3 / 16.3 | 550 / 1299 / 1506 | 1451 |
+| compile + tuned | 24.1 / 33.5 / 48.1 | 4.7 / 5.3 / 5.9 | 4.5 / 4.9 / 8.8 | 428 / 975 / 1149 | 2143 |
+| **vLLM**[^12] | 24.9 / 34.9 / 46.0 | 4.2 / 4.6 / 4.8 | 4.3 / 4.6 / 5.2 | 381 / 908 / 1039 | 2176 |
+| SGLang | 24.3 / 34.3 / 46.2 | 4.0 / 4.4 / 5.0 | 4.0 / 4.3 / 6.0 | 355 / 848 / 988 | 2187 |
 
-[^3]: This means that we'll have a "dummy" KV cache page for these dummy decodes to go into
 
-[^4]: vLLM sidesteps this by keeping the attention eager, while recording graphs for all the rest of the operations, since those operate on a per-token level, not per-sequence. SGLang doesn't have this issue entirely, since their scheduler never mixes prefill/decode
+**Serve, shared prefix (384 shared + ~128 own tokens) at 8 req/s**  (ms, p50 / p90 / p99)
 
-[^5]: SGLang uses a different approach, a [radix tree](https://en.wikipedia.org/wiki/Radix_tree). It is a bit more annoying to code, but allows for advantages like more prefix-matching granularity, unique scheduling algorithms based on the tree. But they're pretty similar in terms of what they accomplish.
+| | TTFT <span data-chart="/llm_inference_engine/charts/pfx.webp" data-alt="Shared prefix: TTFT"></span> | TPOT | ITL | E2E | out tok/s |
+| -------------------------- | ------------------ | ------------------ | ----------------- | ----------------- | --------- |
+| paged (no prefix cache) | 47.0 / 70.8 / 97.9 | 11.6 / 13.7 / 31.7 | 9.9 / 12.4 / 32.5 | 926 / 2219 / 2796 | 601 |
+| prefix | 17.8 / 23.4 / 30.8 | 9.2 / 10.1 / 11.9 | 8.7 / 10.5 / 16.3 | 757 / 1709 / 2090 | 619 |
+| graphs | 17.0 / 21.4 / 28.2 | 7.2 / 7.9 / 9.2 | 6.9 / 7.6 / 16.2 | 607 / 1352 / 1689 | 636 |
+| overlap | 22.4 / 27.0 / 33.8 | 6.6 / 7.1 / 8.3 | 6.4 / 7.1 / 12.3 | 538 / 1236 / 1522 | 633 |
+| compile + tuned | 16.0 / 18.9 / 23.5 | 4.9 / 5.2 / 5.8 | 4.8 / 5.1 / 9.5 | 382 / 910 / 1138 | 623 |
+| vLLM | 18.0 / 20.9 / 26.3 | 4.7 / 5.0 / 6.1 | 4.6 / 4.9 / 10.4 | 359 / 878 / 1123 | 610 |
+| SGLang | 17.7 / 21.5 / 25.8 | 4.4 / 4.8 / 7.1 | 4.2 / 4.5 / 12.2 | 351 / 843 / 1051 | 641 |
+
+**Latency, closed loop: batch 8, 128 in / 64 out**  (ms, p50 / p90 / p99)
+
+| | decode step <span data-chart="/llm_inference_engine/charts/dec.webp" data-alt="Latency: decode step"></span> | prefill | batch <span data-chart="/llm_inference_engine/charts/bat.webp" data-alt="Latency: whole batch"></span> |
+|---|---|---|---|
+| naive | 83.6 / 99.9 / 103 | 66.0 / 66.1 / 66.1 | 5482 / 5483 / 5484 |
+| kv cache | 11.2 / 12.3 / 12.8 | 68.0 / 68.9 / 69.1 | 793 / 796 / 797 |
+| continuous | 12.3 / 13.0 / 13.9 | 70.1 / 70.1 / 70.1 | 846 / 847 / 847 |
+| chunked | 12.8 / 13.5 / 49.0 | 38.6 / 38.6 / 38.6 | 910 / 920 / 922 |
+| flash-attn | 9.6 / 10.8 / 30.9 | 30.6 / 30.7 / 30.8 | 684 / 712 / 718 |
+| paged | 9.1 / 10.6 / 29.9 | 29.4 / 29.5 / 29.5 | 661 / 664 / 665 |
+| prefix | 9.4 / 10.4 / 11.2 | 11.0 / 11.1 / 11.1\* | 606 / 615 / 617 |
+| graphs | 6.7 / 6.9 / 7.1 | 12.0 / 12.5 / 12.6 | 435 / 435 / 436 |
+| overlap | 6.1 / 6.2 / 6.3 | 9.3 / 9.7 / 9.8 | 405 / 405 / 405 |
+| compile + tuned | 4.6 / 4.7 / 4.7 | 5.9 / 6.2 / 8.2 | 305 / 306 / 307 |
+
+\*Prefix cache hits: the bench reruns the same prompts.
+
+
+[^1]: The roofline is an idealized upper bound: it only counts the weight matmuls and assumes kernels reach peak bandwidth and compute. Real decode steps also read each sequence's own KV cache for attention (which isn't shared across the batch) and pay kernel-launch overhead, so measured throughput sits below the roof, most of all near the ridge.
+
+[^3]: The ridge point is peak compute ÷ memory bandwidth: 51.2 TFLOP/s ÷ 360 GB/s ≈ 142 FLOP per byte. Each bf16 weight is 2 bytes and does 2 FLOPs (a multiply and an add) for every sequence in the batch, so a batch of $B$ does $B$ FLOPs per byte of weights read, and the ridge sits at a batch of ≈ 142.
+
+[^2]: This takes inspiration from virtual memory in operating systems: a table maps each request's logical KV positions to blocks, the same way a page table maps virtual pages to physical memory ([Kwon et al., 2023](https://arxiv.org/abs/2309.06180)).
+
+[^4]: vLLM sidesteps this by keeping the attention eager, while recording graphs for all the rest of the operations, since those operate on a per-token level, not per-sequence. SGLang avoids this issue entirely, since their scheduler never mixes prefill/decode
+
+[^5]: SGLang instead stores cached prefixes in a [radix tree](https://en.wikipedia.org/wiki/Radix_tree) (RadixAttention, [Zheng et al., 2023](https://arxiv.org/abs/2312.07104)). This allows token-level rather than block-level prefix matching, and scheduling policies that use the tree's structure.
 
 [^6]: Also may be referred to as Compressed Sparse Row (CSR) layout
 
-[^7]: Honestly not sure why they're called "pointers", they're more like ranges
+[^8]: This is what makes FlashAttention's tiling work: each tile's softmax can be rescaled as later tiles arrive, so Q, K and V stream through on-chip SRAM in one fused kernel and the $n \times n$ score matrix never hits HBM ([Dao et al., 2022](https://arxiv.org/abs/2205.14135)). [FlashAttention-2](https://arxiv.org/abs/2307.08691) then improves work partitioning (fewer non-matmul FLOPs, parallelizing over sequence length, better splitting across warps), and, for decode, [Flash-Decoding](https://crfm.stanford.edu/2023/10/12/flashdecoding.html) (Dao, Haziza, Massa & Sizov, 2023) splits the KV sequence across thread blocks.
 
-[^8]: There are plenty more kernel-level optimizations that attention kernels use, but we won't go into them for this post. Do look at the [FlashAttention paper](https://arxiv.org/abs/2205.14135) if you're curious.
-
-[^9]: in [Triton](https://triton-lang.org/main/index.html)
+[^9]: TorchInductor, torch.compile's default backend, generates [Triton](https://triton-lang.org/main/index.html) kernels on GPU with the fused ops.
 
 [^10]: PyTorch optimizations cause the in-place KV write to turn into a copy, update and copy back
+
+[^11]: This is because FlashInfer needs to know the lengths of the sequences to build a load-balanced schedule for the GPU
+
+[^12]: Our engine is benchmarked in-process: the bench driver calls `engine.step()` directly and timestamps tokens right away, with no HTTP, tokenization or detokenization. vLLM and SGLang are measured through their OpenAI-compatible HTTP servers with streaming. At ~4–5 ms per token that overhead isn't negligible, so this favors our engine.

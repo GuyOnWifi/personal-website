@@ -113,7 +113,7 @@ export default function ChartGallery({ children }: { children?: React.ReactNode 
 
     return (
         <div
-            className="not-prose my-10"
+            className="blog-wide not-prose my-10"
             role="region"
             aria-roledescription="carousel"
             aria-label="benchmark charts"

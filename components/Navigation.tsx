@@ -13,13 +13,14 @@ const navItems = [
 
 export default function Navigation() {
     return (
-        <nav className="flex items-center justify-between py-5 w-full">
-            <Link href="/" className="font-bold text-3xl tracking-tight">
+        <nav className="flex flex-wrap items-center justify-between gap-y-3 py-5 w-full">
+            <Link href="/" className="font-bold text-3xl tracking-tight whitespace-nowrap">
                 eason huang
             </Link>
 
-            <div className="flex items-center gap-6">
-                <div className="hidden sm:flex gap-6">
+            {/* phones: name + toggle on top, links on their own row below */}
+            <div className="contents sm:flex sm:items-center sm:gap-6">
+                <div className="order-last flex w-full gap-6 sm:order-none sm:w-auto">
                     {navItems.map((item) =>
                         item.external ? (
                             <a

@@ -30,7 +30,7 @@ export default function BlogImage({ src, alt, width, height, caption = true }: B
     if (!src) return null;
 
     return (
-        <span className="block my-10">
+        <span className="blog-wide block my-10">
             <span
                 role="button"
                 tabIndex={0}

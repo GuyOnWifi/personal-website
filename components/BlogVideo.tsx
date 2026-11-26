@@ -149,7 +149,7 @@ export default function BlogVideo({ src, poster }: BlogVideoProps) {
     return (
         <figure
             ref={figureRef}
-            className="group relative my-10 overflow-hidden rounded-2xl border border-foreground/10 bg-black/5"
+            className="blog-wide group relative my-10 overflow-hidden rounded-2xl border border-foreground/10 bg-black/5"
         >
             <video
                 ref={ref}
